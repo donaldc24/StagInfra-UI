@@ -1,7 +1,7 @@
-.generate-terraform-button {
-    width: 100px;
-    height: 30px;
-    background-color: blue;
+.terraform-button {
+    width: 160px;
+    height: 40px;
+    background-color: #007acc;
     color: white;
     border: none;
     border-radius: 4px;
@@ -9,53 +9,37 @@
     margin: 20px auto;
     display: block;
     font-size: 14px;
+    font-weight: bold;
     transition: background-color 0.3s ease;
 }
 
-.generate-terraform-button:hover {
-    background-color: darkblue; /* Slightly darker on hover */
+.terraform-button:hover {
+    background-color: #005fa3;
 }
 
-.terraform-modal {
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    background-color: white;
-    border: 1px solid gray;
-    width: 400px;
-    height: 300px;
-    padding: 20px;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-    z-index: 1000;
+.terraform-button:disabled {
+    background-color: #cccccc;
+    cursor: not-allowed;
 }
 
-.terraform-modal-content {
-    height: 220px;
+.terraform-modal .modal-content {
+    width: 600px;
+    max-height: 80vh;
+}
+
+.terraform-modal .code-content {
+    max-height: 50vh;
     overflow-y: auto;
+    margin: 10px 0;
+    padding: 10px;
+    background-color: #f5f5f5;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-family: monospace;
 }
 
-.terraform-modal-content pre {
+.terraform-modal pre {
     margin: 0;
     white-space: pre-wrap;
-    font-size: 12px;
-}
-
-.terraform-modal-buttons {
-    display: flex;
-    justify-content: space-between;
-    margin-top: 20px;
-}
-
-.modal-button {
-    padding: 8px 16px;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    background-color: #f0f0f0;
-    transition: background-color 0.3s ease;
-}
-
-.modal-button:hover {
-    background-color: #e0e0e0; /* Slightly darker on hover */
+    font-size: 14px;
 }

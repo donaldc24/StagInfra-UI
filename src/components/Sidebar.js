@@ -1,17 +1,16 @@
 import React from 'react';
 import { Rect, Text, Group } from 'react-konva';
+import { useDispatch, useSelector } from 'react-redux';
+import { setActiveTab, setLineMode } from '../store/slices/uiStateSlice';
+import { openRenameModal } from '../store/slices/uiStateSlice';
+import { updateComponent, selectComponents } from '../store/slices/componentsSlice';
+import { awsComponentRegistry } from '../services/awsComponentRegistry';
 
-function Sidebar({
-                     activeTab,
-                     setActiveTab,
-                     isLineMode,
-                     setIsLineMode,
-                     handleMouseDown,
-                     canvasComponents = [],
-                     handleComponentUpdate,
-                     lineStart,
-                     openRenameModal,
-                 }) {
+function Sidebar({ handleMouseDown, lineStart, handleClearConnections }) {
+    const dispatch = useDispatch();
+    const { activeTab, isLineMode } = useSelector(state => state.uiState);
+    const canvasComponents = useSelector(selectComponents);
+
     const handleMouseEnter = (e) => {
         e.target.scaleX(1.1);
         e.target.scaleY(1.1);
@@ -25,11 +24,16 @@ function Sidebar({
     const incrementValue = (id, field, delta) => {
         const comp = canvasComponents.find((c) => c?.id === id);
         if (!comp) return;
+
         const current = field === 'instances' ? comp.instances : comp.storage;
         const min = field === 'instances' ? 1 : 10;
         const max = field === 'instances' ? 10 : 1000;
         const newValue = Math.max(min, Math.min(max, current + delta));
-        handleComponentUpdate(id, field, newValue);
+
+        dispatch(updateComponent({
+            id,
+            changes: { [field]: newValue }
+        }));
     };
 
     const tabNames = [
@@ -54,11 +58,11 @@ function Sidebar({
         return x;
     };
 
-    console.log('Sidebar Render:', { activeTab, canvasComponents });
-
     return (
         <>
             <Rect x={0} y={0} width={240} height={400} fill="white" stroke="gray" strokeWidth={1} />
+
+            {/* Tabs */}
             {tabNames.map((tab, index) => (
                 <Group key={tab.key}>
                     <Rect
@@ -67,7 +71,7 @@ function Sidebar({
                         width={getTabWidth(tab.key)}
                         height={30}
                         fill={activeTab === tab.key ? '#e0e0e0' : '#f0f0f0'}
-                        onClick={() => setActiveTab(tab.key)}
+                        onClick={() => dispatch(setActiveTab(tab.key))}
                     />
                     <Text
                         x={getTabX(index) + (activeTab === tab.key ? 5 : 5)}
@@ -79,6 +83,8 @@ function Sidebar({
                     />
                 </Group>
             ))}
+
+            {/* Add Tab Content */}
             {activeTab === 'add' && (
                 <>
                     <Rect
@@ -86,28 +92,32 @@ function Sidebar({
                         y={50}
                         width={40}
                         height={40}
-                        fill="orange"
+                        fill={awsComponentRegistry.ec2.color || "orange"}
                         onMouseDown={(e) => handleMouseDown('ec2', e)}
                         onMouseEnter={handleMouseEnter}
                         onMouseLeave={handleMouseLeave}
+                        cornerRadius={4}
                     />
                     <Text x={100} y={95} text="EC2" fontSize={12} fill="black" align="center" width={40} />
+
                     <Rect
                         x={100}
                         y={130}
                         width={40}
                         height={40}
-                        fill="green"
+                        fill={awsComponentRegistry.s3.color || "green"}
                         onMouseDown={(e) => handleMouseDown('s3', e)}
                         onMouseEnter={handleMouseEnter}
                         onMouseLeave={handleMouseLeave}
+                        cornerRadius={4}
                     />
                     <Text x={100} y={175} text="S3" fontSize={12} fill="black" align="center" width={40} />
                 </>
             )}
+
+            {/* Components Tab Content */}
             {activeTab === 'components' && (
                 <>
-                    {console.log('Rendering Components Tab:', canvasComponents)}
                     {canvasComponents.length === 0 ? (
                         <Text
                             x={0}
@@ -123,10 +133,13 @@ function Sidebar({
                         />
                     ) : (
                         canvasComponents.map((comp, index) => {
-                            console.log('Mapping Component:', comp);
                             if (!comp || !comp.type || !comp.id) {
                                 return null;
                             }
+
+                            const metadata = awsComponentRegistry[comp.type] || {};
+                            const displayName = comp.name || metadata.displayName || `${(comp.type || '').toUpperCase()}-${(comp.id || '').slice(-4) || ''}`;
+
                             return (
                                 <Group key={comp.id} y={40 + index * 50}>
                                     <Rect
@@ -139,7 +152,7 @@ function Sidebar({
                                     <Text
                                         x={10}
                                         y={0}
-                                        text={comp.name || `${(comp.type || '').toUpperCase()}-${(comp.id || '').slice(-4) || ''}`}
+                                        text={displayName}
                                         fontSize={14}
                                         fill="black"
                                         fontStyle={lineStart && lineStart?.id === comp.id ? 'bold' : 'normal'}
@@ -199,7 +212,7 @@ function Sidebar({
                                         width={60}
                                         height={20}
                                         fill="#e0e0e0"
-                                        onClick={() => openRenameModal(comp)}
+                                        onClick={() => dispatch(openRenameModal(comp))}
                                     />
                                     <Text
                                         x={170}
@@ -217,6 +230,8 @@ function Sidebar({
                     )}
                 </>
             )}
+
+            {/* Tools Tab Content */}
             {activeTab === 'tools' && (
                 <Group>
                     <Rect
@@ -225,9 +240,19 @@ function Sidebar({
                         width={100}
                         height={30}
                         fill={isLineMode ? '#666666' : '#999999'}
-                        onClick={() => setIsLineMode(!isLineMode)}
+                        onClick={() => dispatch(setLineMode(!isLineMode))}
                     />
                     <Text x={95} y={60} text="Line Tool" fontSize={12} fill="white" listening={false} />
+
+                    <Rect
+                        x={70}
+                        y={100}
+                        width={100}
+                        height={30}
+                        fill="#ff4444"
+                        onClick={handleClearConnections}
+                    />
+                    <Text x={85} y={110} text="Clear Connections" fontSize={12} fill="white" listening={false} />
                 </Group>
             )}
         </>
