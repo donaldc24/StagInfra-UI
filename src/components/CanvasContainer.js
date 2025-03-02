@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Stage, Layer } from 'react-konva';
 import { useDispatch, useSelector } from 'react-redux';
 import Canvas from './Canvas';
@@ -34,6 +34,31 @@ function CanvasContainer() {
     const draggingComponent = useSelector(selectDraggingComponent);
     const [ghostLine, setLocalGhostLine] = useState(null);
     const [validationMessage, setValidationMessage] = useState('');
+
+    // Add a timer reference to clear validation messages
+    const validationTimerRef = useRef(null);
+
+    // Clear validation message after a timeout
+    useEffect(() => {
+        if (validationMessage) {
+            // Clear any existing timer
+            if (validationTimerRef.current) {
+                clearTimeout(validationTimerRef.current);
+            }
+
+            // Set a new timer to clear the message after 3 seconds
+            validationTimerRef.current = setTimeout(() => {
+                setValidationMessage('');
+            }, 3000);
+        }
+
+        // Cleanup on unmount
+        return () => {
+            if (validationTimerRef.current) {
+                clearTimeout(validationTimerRef.current);
+            }
+        };
+    }, [validationMessage]);
 
     const handleSelectComponent = (type) => {
         if (!type) return;

@@ -56,6 +56,13 @@ function App() {
     const updateBackendCost = async () => {
         try {
             const components = canvasComponents;
+
+            // If there are no components, explicitly set cost to 0
+            if (components.length === 0) {
+                dispatch(updateCost(0));
+                return;
+            }
+
             await axios.post('http://localhost:8080/api/cost', { components });
             const response = await axios.get('http://localhost:8080/api/cost');
             dispatch(updateCost(response.data.total));
@@ -67,10 +74,8 @@ function App() {
 
     // Handle component update in localStorage and backend
     useEffect(() => {
-        if (canvasComponents.length > 0) {
-            localStorage.setItem('canvasComponents', JSON.stringify(canvasComponents));
-            updateBackendCost();
-        }
+        localStorage.setItem('canvasComponents', JSON.stringify(canvasComponents));
+        updateBackendCost();
     }, [canvasComponents]);
 
     const handleSaveCustomName = (customName) => {
