@@ -1,0 +1,26 @@
+.App {
+    text-align: center;
+    margin-top: 50px;
+}
+
+h1 {
+    font-size: 24px;
+    color: #000000;
+}
+
+.connected {
+    font-size: 16px;
+    color: #008000;
+}
+
+.not-connected {
+    font-size: 16px;
+    color: #FF0000;
+}
+
+.main-container {
+    display: flex;
+    justify-content: center;
+    margin-top: 20px;
+    position: relative;
+}
