@@ -10,60 +10,83 @@ import { loadComponents, updateComponentsFromStorage, selectComponents } from '.
 import { loadConnections } from './store/slices/connectionsSlice';
 import { updateCost } from './store/slices/costSlice';
 import { closeRenameModal } from './store/slices/uiStateSlice';
+import { getComponents, getConnections, saveComponents, saveConnections } from './services/storageService';
 import './styles/App.css';
 
 function App() {
     const dispatch = useDispatch();
     const backendStatus = useSelector(state => state.system.backendStatus);
     const canvasComponents = useSelector(selectComponents);
+    const connections = useSelector(state => state.connections);
     const { renameModalOpen, selectedComponent } = useSelector(state => state.uiState);
     const totalCost = useSelector(state => state.cost.total);
 
+    // On initial load - load saved data and check backend
     useEffect(() => {
-        const initializeState = async () => {
+        console.log('App mounted - initializing state');
+
+        // Load saved components
+        const savedComponents = getComponents();
+        if (savedComponents.length > 0) {
+            console.log('Dispatching saved components to Redux:', savedComponents);
+            dispatch(loadComponents(savedComponents));
+        }
+
+        // Load saved connections
+        const savedConnections = getConnections();
+        if (savedConnections.length > 0) {
+            console.log('Dispatching saved connections to Redux:', savedConnections);
+            dispatch(loadConnections(savedConnections));
+        }
+
+        // Check backend connection
+        const checkBackend = async () => {
             try {
-                // Check backend health
-                const healthResponse = await axios.get('http://localhost:8080/api/health');
-                dispatch(setBackendStatus(healthResponse.data.status === 'OK' ? 'Backend connected' : 'Backend not connected'));
-
-                // Load components and connections from localStorage
-                const savedComponents = localStorage.getItem('canvasComponents');
-                const savedConnections = localStorage.getItem('connections');
-
-                if (savedComponents) {
-                    let components = JSON.parse(savedComponents);
-                    // Filter out invalid components
-                    components = components.filter(comp => comp && comp.type && comp.id);
-                    dispatch(loadComponents(components));
-                    localStorage.setItem('canvasComponents', JSON.stringify(components));
-                }
-
-                if (savedConnections) {
-                    dispatch(loadConnections(JSON.parse(savedConnections)));
-                }
-
-                // Update cost from backend
-                await updateBackendCost();
+                const response = await axios.get('http://localhost:8080/api/health');
+                dispatch(setBackendStatus(response.data.status === 'OK' ? 'Backend connected' : 'Backend not connected'));
             } catch (error) {
-                console.error('Error initializing state:', error);
+                console.error('Error connecting to backend:', error);
                 dispatch(setBackendStatus('Backend not connected'));
             }
         };
 
-        initializeState();
+        checkBackend();
+
+        // Initial cost calculation will happen in the components useEffect
     }, [dispatch]);
+
+    // Save components whenever they change
+    useEffect(() => {
+        if (canvasComponents !== undefined) {
+            console.log('Components changed - saving to localStorage:', canvasComponents);
+            saveComponents(canvasComponents);
+
+            // Update cost calculation
+            updateBackendCost();
+        }
+    }, [canvasComponents]);
+
+    // Save connections whenever they change
+    useEffect(() => {
+        if (connections !== undefined) {
+            console.log('Connections changed - saving to localStorage:', connections);
+            saveConnections(connections);
+        }
+    }, [connections]);
 
     const updateBackendCost = async () => {
         try {
-            const components = canvasComponents;
-
-            // If there are no components, explicitly set cost to 0
-            if (components.length === 0) {
+            // If there are no components, set cost to 0
+            if (!canvasComponents || canvasComponents.length === 0) {
+                console.log('No components - setting cost to 0');
                 dispatch(updateCost(0));
                 return;
             }
 
-            await axios.post('http://localhost:8080/api/cost', { components });
+            // Send components to backend
+            await axios.post('http://localhost:8080/api/cost', { components: canvasComponents });
+
+            // Get updated cost
             const response = await axios.get('http://localhost:8080/api/cost');
             dispatch(updateCost(response.data.total));
         } catch (error) {
@@ -71,12 +94,6 @@ function App() {
             dispatch(updateCost('Error'));
         }
     };
-
-    // Handle component update in localStorage and backend
-    useEffect(() => {
-        localStorage.setItem('canvasComponents', JSON.stringify(canvasComponents));
-        updateBackendCost();
-    }, [canvasComponents]);
 
     const handleSaveCustomName = (customName) => {
         if (customName.trim() && selectedComponent) {
