@@ -1,10 +1,11 @@
+// src/components/Sidebar.js
 import React from 'react';
 import { Rect, Text, Group } from 'react-konva';
 import { useDispatch, useSelector } from 'react-redux';
 import { setActiveTab, setLineMode } from '../store/slices/uiStateSlice';
 import { openRenameModal } from '../store/slices/uiStateSlice';
 import { updateComponent, selectComponents } from '../store/slices/componentsSlice';
-import { awsComponentRegistry } from '../services/awsComponentRegistry';
+import { getComponentCategories, awsComponentRegistry } from '../services/awsComponentRegistry';
 
 function Sidebar({ handleMouseDown, lineStart, handleClearConnections }) {
     const dispatch = useDispatch();
@@ -25,9 +26,15 @@ function Sidebar({ handleMouseDown, lineStart, handleClearConnections }) {
         const comp = canvasComponents.find((c) => c?.id === id);
         if (!comp) return;
 
-        const current = field === 'instances' ? comp.instances : comp.storage;
-        const min = field === 'instances' ? 1 : 10;
-        const max = field === 'instances' ? 10 : 1000;
+        const current = comp[field] !== undefined ? comp[field] : 0;
+
+        // Get min/max values from component metadata if available
+        const metadata = awsComponentRegistry[comp.type];
+        const propertyDef = metadata?.propertyEditors?.find(p => p.key === field);
+
+        const min = propertyDef?.min || 0;
+        const max = propertyDef?.max || 9999;
+
         const newValue = Math.max(min, Math.min(max, current + delta));
 
         dispatch(updateComponent({
@@ -58,6 +65,9 @@ function Sidebar({ handleMouseDown, lineStart, handleClearConnections }) {
         return x;
     };
 
+    // Get categories and component types for the Add tab
+    const categories = getComponentCategories();
+
     return (
         <>
             <Rect x={0} y={0} width={240} height={400} fill="white" stroke="gray" strokeWidth={1} />
@@ -86,33 +96,49 @@ function Sidebar({ handleMouseDown, lineStart, handleClearConnections }) {
 
             {/* Add Tab Content */}
             {activeTab === 'add' && (
-                <>
-                    <Rect
-                        x={100}
-                        y={50}
-                        width={40}
-                        height={40}
-                        fill={awsComponentRegistry.ec2.color || "orange"}
-                        onMouseDown={(e) => handleMouseDown('ec2', e)}
-                        onMouseEnter={handleMouseEnter}
-                        onMouseLeave={handleMouseLeave}
-                        cornerRadius={4}
-                    />
-                    <Text x={100} y={95} text="EC2" fontSize={12} fill="black" align="center" width={40} />
-
-                    <Rect
-                        x={100}
-                        y={130}
-                        width={40}
-                        height={40}
-                        fill={awsComponentRegistry.s3.color || "green"}
-                        onMouseDown={(e) => handleMouseDown('s3', e)}
-                        onMouseEnter={handleMouseEnter}
-                        onMouseLeave={handleMouseLeave}
-                        cornerRadius={4}
-                    />
-                    <Text x={100} y={175} text="S3" fontSize={12} fill="black" align="center" width={40} />
-                </>
+                <Group y={40}>
+                    {Object.entries(categories).map(([category, componentTypes], catIndex) => (
+                        <Group key={category} y={catIndex * 100}>
+                            <Text
+                                x={10}
+                                y={0}
+                                text={category.charAt(0).toUpperCase() + category.slice(1)}
+                                fontSize={14}
+                                fontStyle="bold"
+                                fill="#333"
+                            />
+                            <Group y={20}>
+                                {componentTypes.map((type, typeIndex) => {
+                                    const component = awsComponentRegistry[type];
+                                    const row = Math.floor(typeIndex / 2);
+                                    const col = typeIndex % 2;
+                                    return (
+                                        <Group key={type} x={10 + col * 110} y={row * 70}>
+                                            <Rect
+                                                width={40}
+                                                height={40}
+                                                fill={component.color}
+                                                cornerRadius={4}
+                                                onMouseDown={(e) => handleMouseDown(type, e)}
+                                                onMouseEnter={handleMouseEnter}
+                                                onMouseLeave={handleMouseLeave}
+                                            />
+                                            <Text
+                                                x={0}
+                                                y={45}
+                                                text={component.displayName}
+                                                fontSize={12}
+                                                fill="#333"
+                                                width={90}
+                                                align="center"
+                                            />
+                                        </Group>
+                                    );
+                                })}
+                            </Group>
+                        </Group>
+                    ))}
+                </Group>
             )}
 
             {/* Components Tab Content */}
@@ -140,75 +166,107 @@ function Sidebar({ handleMouseDown, lineStart, handleClearConnections }) {
                             const metadata = awsComponentRegistry[comp.type] || {};
                             const displayName = comp.name || metadata.displayName || `${(comp.type || '').toUpperCase()}-${(comp.id || '').slice(-4) || ''}`;
 
+                            // Determine which properties to show based on component type
+                            const propertiesToShow = metadata.propertyEditors
+                                ? metadata.propertyEditors.slice(0, 2) // Show top 2 properties
+                                : [];
+
                             return (
-                                <Group key={comp.id} y={40 + index * 50}>
+                                <Group key={comp.id} y={40 + index * (70 + propertiesToShow.length * 20)}>
                                     <Rect
                                         x={0}
                                         y={0}
                                         width={240}
-                                        height={50}
+                                        height={60 + propertiesToShow.length * 20}
                                         fill={lineStart && lineStart?.id === comp.id ? '#FFFFCC' : 'transparent'}
-                                    />
-                                    <Text
-                                        x={10}
-                                        y={0}
-                                        text={displayName}
-                                        fontSize={14}
-                                        fill="black"
-                                        fontStyle={lineStart && lineStart?.id === comp.id ? 'bold' : 'normal'}
-                                    />
-                                    <Text
-                                        x={20}
-                                        y={20}
-                                        text={comp.type === 'ec2' ? 'Instances' : 'Storage (GB)'}
-                                        fontSize={12}
-                                        fontStyle="bold"
-                                        fill="black"
-                                    />
-                                    <Rect
-                                        x={100}
-                                        y={20}
-                                        width={40}
-                                        height={20}
-                                        fill="#ffffff"
-                                        stroke="#ccc"
+                                        stroke="#eee"
                                         strokeWidth={1}
                                     />
-                                    <Text
-                                        x={105}
-                                        y={23}
-                                        text={
-                                            comp.type === 'ec2'
-                                                ? (comp.instances || 0).toString()
-                                                : (comp.storage || 0).toString()
-                                        }
-                                        fontSize={12}
-                                        fill="black"
-                                        width={30}
-                                        align="center"
-                                        listening={false}
-                                    />
-                                    <Rect
-                                        x={145}
-                                        y={20}
-                                        width={15}
-                                        height={10}
-                                        fill="#ccc"
-                                        onClick={() => incrementValue(comp.id, comp.type === 'ec2' ? 'instances' : 'storage', 1)}
-                                    />
-                                    <Text x={148} y={20} text="▲" fontSize={8} fill="black" listening={false} />
-                                    <Rect
-                                        x={145}
-                                        y={30}
-                                        width={15}
-                                        height={10}
-                                        fill="#ccc"
-                                        onClick={() => incrementValue(comp.id, comp.type === 'ec2' ? 'instances' : 'storage', -1)}
-                                    />
-                                    <Text x={148} y={30} text="▼" fontSize={8} fill="black" listening={false} />
+                                    <Group x={10} y={10}>
+                                        <Rect
+                                            width={20}
+                                            height={20}
+                                            fill={metadata.color || comp.fill}
+                                            cornerRadius={2}
+                                        />
+                                        <Text
+                                            x={30}
+                                            y={2}
+                                            text={displayName}
+                                            fontSize={14}
+                                            fontStyle="bold"
+                                            fill="black"
+                                        />
+                                    </Group>
+
+                                    {/* Property editors */}
+                                    {propertiesToShow.map((propDef, propIndex) => {
+                                        const propValue = comp[propDef.key] !== undefined
+                                            ? comp[propDef.key]
+                                            : metadata.defaultProperties[propDef.key];
+
+                                        return (
+                                            <Group key={propDef.key} y={35 + propIndex * 20}>
+                                                <Text
+                                                    x={20}
+                                                    y={0}
+                                                    text={propDef.label}
+                                                    fontSize={12}
+                                                    fontStyle="normal"
+                                                    fill="#666"
+                                                    width={100}
+                                                />
+
+                                                <Rect
+                                                    x={120}
+                                                    y={0}
+                                                    width={40}
+                                                    height={16}
+                                                    fill="#ffffff"
+                                                    stroke="#ccc"
+                                                    strokeWidth={1}
+                                                />
+
+                                                <Text
+                                                    x={125}
+                                                    y={1}
+                                                    text={propValue?.toString() || ''}
+                                                    fontSize={12}
+                                                    fill="black"
+                                                    width={30}
+                                                />
+
+                                                {propDef.type === 'number' && (
+                                                    <Group>
+                                                        <Rect
+                                                            x={165}
+                                                            y={0}
+                                                            width={15}
+                                                            height={8}
+                                                            fill="#ccc"
+                                                            onClick={() => incrementValue(comp.id, propDef.key, 1)}
+                                                        />
+                                                        <Text x={168} y={-2} text="▲" fontSize={8} fill="black" listening={false} />
+
+                                                        <Rect
+                                                            x={165}
+                                                            y={8}
+                                                            width={15}
+                                                            height={8}
+                                                            fill="#ccc"
+                                                            onClick={() => incrementValue(comp.id, propDef.key, -1)}
+                                                        />
+                                                        <Text x={168} y={6} text="▼" fontSize={8} fill="black" listening={false} />
+                                                    </Group>
+                                                )}
+                                            </Group>
+                                        );
+                                    })}
+
+                                    {/* Rename button */}
                                     <Rect
                                         x={165}
-                                        y={20}
+                                        y={10}
                                         width={60}
                                         height={20}
                                         fill="#e0e0e0"
@@ -216,7 +274,7 @@ function Sidebar({ handleMouseDown, lineStart, handleClearConnections }) {
                                     />
                                     <Text
                                         x={170}
-                                        y={23}
+                                        y={13}
                                         text="Rename"
                                         fontSize={12}
                                         fill="black"
@@ -233,26 +291,69 @@ function Sidebar({ handleMouseDown, lineStart, handleClearConnections }) {
 
             {/* Tools Tab Content */}
             {activeTab === 'tools' && (
-                <Group>
+                <Group y={50}>
+                    <Rect
+                        x={70}
+                        y={0}
+                        width={100}
+                        height={30}
+                        fill={isLineMode ? '#666666' : '#999999'}
+                        onClick={() => dispatch(setLineMode(!isLineMode))}
+                        cornerRadius={4}
+                    />
+                    <Text
+                        x={95}
+                        y={8}
+                        text="Line Tool"
+                        fontSize={12}
+                        fill="white"
+                        align="center"
+                        width={50}
+                        listening={false}
+                    />
+
                     <Rect
                         x={70}
                         y={50}
                         width={100}
                         height={30}
-                        fill={isLineMode ? '#666666' : '#999999'}
-                        onClick={() => dispatch(setLineMode(!isLineMode))}
-                    />
-                    <Text x={95} y={60} text="Line Tool" fontSize={12} fill="white" listening={false} />
-
-                    <Rect
-                        x={70}
-                        y={100}
-                        width={100}
-                        height={30}
                         fill="#ff4444"
                         onClick={handleClearConnections}
+                        cornerRadius={4}
                     />
-                    <Text x={85} y={110} text="Clear Connections" fontSize={12} fill="white" listening={false} />
+                    <Text
+                        x={70}
+                        y={58}
+                        text="Clear Connections"
+                        fontSize={12}
+                        fill="white"
+                        align="center"
+                        width={100}
+                        listening={false}
+                    />
+
+                    <Group y={100}>
+                        <Text
+                            x={0}
+                            y={0}
+                            text="Connection Instructions:"
+                            fontSize={14}
+                            fontStyle="bold"
+                            fill="#333"
+                            width={240}
+                            padding={10}
+                        />
+                        <Text
+                            x={0}
+                            y={20}
+                            text="1. Click 'Line Tool' to activate\n2. Click source component\n3. Click target component\n\nOnly valid connections will be created."
+                            fontSize={12}
+                            fill="#333"
+                            width={240}
+                            padding={10}
+                            lineHeight={1.5}
+                        />
+                    </Group>
                 </Group>
             )}
         </>
