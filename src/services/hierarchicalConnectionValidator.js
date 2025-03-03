@@ -1,5 +1,5 @@
 // src/services/hierarchicalConnectionValidator.js
-import { getComponentMetadata } from './awsComponentRegistry';
+import { getComponentMetadata } from './hierarchicalAwsComponentRegistry';
 
 /**
  * Validates whether a connection can be created between two components

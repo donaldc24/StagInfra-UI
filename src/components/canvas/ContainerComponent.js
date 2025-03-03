@@ -1,7 +1,8 @@
-// src/components/canvas/ContainerComponent.js
+// Update src/components/canvas/ContainerComponent.js
+
 import React, { useState } from 'react';
 import { Group, Rect, Text } from 'react-konva';
-import { getComponentMetadata } from '../../services/awsComponentRegistry';
+import { getComponentMetadata } from '../../services/hierarchicalAwsComponentRegistry';
 
 const ContainerComponent = ({
                                 component,
@@ -47,14 +48,57 @@ const ContainerComponent = ({
         setIsCollapsed(prev => !prev);
     };
 
+    const handleDragStart = (e) => {
+        // Add visual feedback for dragging
+        e.target.setAttrs({
+            shadowOffset: {
+                x: 3,
+                y: 3
+            },
+            shadowBlur: 10,
+            shadowOpacity: 0.2
+        });
+
+        console.log(`Started dragging container ${id}`);
+    };
+
+    const handleDragMove = (e) => {
+        if (onDragMove) {
+            onDragMove(e, id);
+        }
+    };
+
+    const handleDragEnd = (e) => {
+        // Reset appearance
+        e.target.to({
+            duration: 0.1,
+            shadowOffset: {
+                x: 0,
+                y: 0
+            },
+            shadowBlur: 0,
+            shadowOpacity: 0
+        });
+
+        if (onDragEnd) {
+            onDragEnd(e, id);
+        }
+
+        console.log(`Finished dragging container ${id}`);
+    };
+
     return (
         <Group
             x={x}
             y={y}
-            draggable
-            onClick={onClick}
-            onDragMove={onDragMove}
-            onDragEnd={onDragEnd}
+            draggable={true}
+            onClick={(e) => onClick && onClick(e, component)}
+            onDragStart={handleDragStart}
+            onDragMove={handleDragMove}
+            onDragEnd={handleDragEnd}
+            // Important: set the width and height explicitly
+            width={width}
+            height={isCollapsed ? 30 : height}
         >
             {/* Container background */}
             <Rect
@@ -65,6 +109,10 @@ const ContainerComponent = ({
                 strokeWidth={strokeWidth}
                 dash={style.dash}
                 cornerRadius={type === 'vpc' ? 8 : 4}
+                shadowColor="rgba(0,0,0,0.2)"
+                shadowBlur={isSelected ? 6 : 0}
+                shadowOffset={{ x: 0, y: 2 }}
+                shadowOpacity={0.3}
             />
 
             {/* Header section */}

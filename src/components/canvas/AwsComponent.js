@@ -1,7 +1,7 @@
 // src/components/canvas/AwsComponent.js
 import React from 'react';
 import { Group, Rect, Text, Circle } from 'react-konva';
-import { getComponentMetadata } from '../../services/awsComponentRegistry';
+import { getComponentMetadata } from '../../services/hierarchicalAwsComponentRegistry';
 
 const AwsComponent = ({
                           component,
@@ -28,16 +28,47 @@ const AwsComponent = ({
         strokeWidth = 2;
     }
 
+    const handleDragStart = (e) => {
+        // This is important for allowing drag behavior
+        e.target.setAttrs({
+            shadowOffset: {
+                x: 5,
+                y: 5
+            },
+            scaleX: 1.05,
+            scaleY: 1.05
+        });
+    };
+
+    const handleDragEnd = (e) => {
+        // Reset appearance after drag
+        e.target.to({
+            duration: 0.1,
+            shadowOffset: {
+                x: 0,
+                y: 0
+            },
+            scaleX: 1,
+            scaleY: 1
+        });
+
+        // Call the external handler
+        if (onDragEnd) {
+            onDragEnd(e, id);
+        }
+    };
+
     return (
         <Group
             x={x}
             y={y}
             width={width}
             height={height}
-            draggable
-            onClick={onClick}
-            onDragMove={onDragMove}
-            onDragEnd={onDragEnd}
+            draggable={true}
+            onClick={(e) => onClick && onClick(e, component)}
+            onDragStart={handleDragStart}
+            onDragMove={(e) => onDragMove && onDragMove(e, id)}
+            onDragEnd={handleDragEnd}
             className="aws-component"
         >
             {/* Main shape */}

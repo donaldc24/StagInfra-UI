@@ -5,7 +5,8 @@ import { FileCode } from 'lucide-react';
 
 // Import actions
 import { setLineMode } from '../store/slices/uiStateSlice';
-import { updateComponent } from '../store/slices/componentsSlice';
+import { updateComponent, removeComponent } from '../store/slices/componentsSlice';
+import { removeComponentConnections } from '../store/slices/connectionsSlice';
 
 // Import hooks
 import useNotification from '../hooks/useNotification';
@@ -39,22 +40,23 @@ const CloudArchitectureDesigner = () => {
     // Effects
     useEffect(() => {
         // Listen for component selection events
-        const handleComponentSelection = (event) => {
+        const handleComponentSelectionEvent = (event) => {
             if (event.detail && event.detail.component) {
                 setSelectedComponent(event.detail.component);
                 setIsPropertyPanelOpen(true);
             }
         };
 
-        window.addEventListener('component-selected', handleComponentSelection);
+        window.addEventListener('component-selected', handleComponentSelectionEvent);
 
         return () => {
-            window.removeEventListener('component-selected', handleComponentSelection);
+            window.removeEventListener('component-selected', handleComponentSelectionEvent);
         };
     }, []);
 
     // Handlers
     const handleComponentSelect = (component) => {
+        console.log('Component selected:', component);
         setSelectedComponent(component);
         setIsPropertyPanelOpen(true);
     };
@@ -76,6 +78,15 @@ const CloudArchitectureDesigner = () => {
         );
     };
 
+    const handleDeleteComponent = (componentId) => {
+        if (!componentId) return;
+
+        dispatch(removeComponent(componentId));
+        dispatch(removeComponentConnections(componentId));
+        setSelectedComponent(null);
+        showNotification(`Component deleted`, 'success');
+    };
+
     const generateTerraformCode = () => {
         // This would be implemented to call your terraform generation service
         // const code = generateTerraform(components, connections);
@@ -89,10 +100,10 @@ const CloudArchitectureDesigner = () => {
                 <h1 className="app-title">Cloud Architecture Designer</h1>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <span className={`status-indicator ${backendStatus === 'connected' ? 'status-connected' : 'status-disconnected'}`}>
-            <span className={`status-dot ${backendStatus === 'connected' ? 'status-dot-connected' : 'status-dot-disconnected'}`}></span>
-              {backendStatus === 'connected' ? 'Backend Connected' : 'Backend Disconnected'}
-          </span>
+                    <span className={`status-indicator ${backendStatus === 'connected' ? 'status-connected' : 'status-disconnected'}`}>
+                        <span className={`status-dot ${backendStatus === 'connected' ? 'status-dot-connected' : 'status-dot-disconnected'}`}></span>
+                        {backendStatus === 'connected' ? 'Backend Connected' : 'Backend Disconnected'}
+                    </span>
 
                     <button className="btn-primary" onClick={generateTerraformCode}>
                         <FileCode style={{ width: '1rem', height: '1rem' }} />
@@ -143,17 +154,41 @@ const CloudArchitectureDesigner = () => {
                                                     <div
                                                         key={item}
                                                         className="component-item"
-                                                        draggable
+                                                        draggable="true"
                                                         onDragStart={(e) => {
+                                                            // Store the component type in dataTransfer
                                                             e.dataTransfer.setData('component-type', item);
+
+                                                            // Create a visual drag image (optional)
+                                                            const dragImage = document.createElement('div');
+                                                            dragImage.textContent = item.toUpperCase();
+                                                            dragImage.style.backgroundColor = iconClass === 'icon-compute' ? '#f97316' :
+                                                                iconClass === 'icon-storage' ? '#16a34a' :
+                                                                    iconClass === 'icon-database' ? '#2563eb' : '#7c3aed';
+                                                            dragImage.style.color = 'white';
+                                                            dragImage.style.padding = '5px 10px';
+                                                            dragImage.style.borderRadius = '4px';
+                                                            dragImage.style.position = 'absolute';
+                                                            dragImage.style.top = '-1000px';
+                                                            document.body.appendChild(dragImage);
+
+                                                            e.dataTransfer.setDragImage(dragImage, 15, 15);
+
+                                                            // Log for debugging
+                                                            console.log(`Started dragging component type: ${item}`);
+
+                                                            // Clean up the drag image element after drag operation
+                                                            setTimeout(() => {
+                                                                document.body.removeChild(dragImage);
+                                                            }, 0);
                                                         }}
                                                     >
                                                         <div className={`component-icon-container ${iconClass}`}>
                                                             {item.substring(0, 2).toUpperCase()}
                                                         </div>
                                                         <span className="component-name">
-                              {item.toUpperCase()}
-                            </span>
+                                                            {item.toUpperCase()}
+                                                        </span>
                                                     </div>
                                                 );
                                             })}
@@ -186,12 +221,12 @@ const CloudArchitectureDesigner = () => {
                                                                         '#6b7280'
                                                     }}></div>
                                                     <span style={{ fontWeight: 500, fontSize: '0.875rem' }}>
-                            {component.name || `${component.type.toUpperCase()}-${component.id.slice(-4)}`}
-                          </span>
+                                                        {component.name || `${component.type.toUpperCase()}-${component.id.slice(-4)}`}
+                                                    </span>
                                                 </div>
                                                 <span className="component-type-badge">
-                          {component.type.toUpperCase()}
-                        </span>
+                                                    {component.type.toUpperCase()}
+                                                </span>
                                             </div>
 
                                             <div className="component-properties">
@@ -295,7 +330,10 @@ const CloudArchitectureDesigner = () => {
                 {/* Center canvas area */}
                 <div className="canvas-area">
                     {/* Render the optimized canvas container */}
-                    <OptimizedCanvasContainer />
+                    <OptimizedCanvasContainer
+                        onComponentSelect={handleComponentSelect}
+                        showNotification={showNotification}
+                    />
 
                     {/* Cost indicator */}
                     <div className="cost-widget">
@@ -355,8 +393,8 @@ const CloudArchitectureDesigner = () => {
                                             {selectedComponent.name || `${selectedComponent.type.toUpperCase()}-${selectedComponent.id.slice(-4)}`}
                                         </h4>
                                         <span className="component-type-badge">
-                      {selectedComponent.type.toUpperCase()}
-                    </span>
+                                            {selectedComponent.type.toUpperCase()}
+                                        </span>
                                     </div>
 
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
@@ -463,11 +501,7 @@ const CloudArchitectureDesigner = () => {
                                 <div className="panel-footer">
                                     <button
                                         className="btn-danger"
-                                        onClick={() => {
-                                            // Implement delete component
-                                            showNotification(`Deleted ${selectedComponent.type} component`, 'success');
-                                            setSelectedComponent(null);
-                                        }}
+                                        onClick={() => handleDeleteComponent(selectedComponent.id)}
                                     >
                                         Delete Component
                                     </button>
@@ -497,13 +531,13 @@ const CloudArchitectureDesigner = () => {
                         key={notification.id}
                         className={`notification notification-${notification.type || 'info'}`}
                     >
-            <span className="notification-icon">
-              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="10"></circle>
-                <line x1="12" y1="8" x2="12" y2="12"></line>
-                <line x1="12" y1="16" x2="12.01" y2="16"></line>
-              </svg>
-            </span>
+                        <span className="notification-icon">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <line x1="12" y1="8" x2="12" y2="12"></line>
+                            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                          </svg>
+                        </span>
                         <p className="notification-message">{notification.message}</p>
                     </div>
                 ))}
