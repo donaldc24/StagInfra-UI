@@ -484,6 +484,51 @@ const CloudArchitectureDesigner = () => {
                                             </div>
                                         )}
 
+                                        {selectedComponent.type === 'ebs' && (
+                                            <>
+                                            <div className="form-group">
+                                                <label className="form-label">Volume Size (GB)</label>
+                                                <input
+                                                    type="number"
+                                                    className="form-input"
+                                                    value={selectedComponent.size || 20}
+                                                    onChange={(e) => updateComponentProperty(selectedComponent.id, 'size', parseInt(e.target.value) || 20)}
+                                                    min="1"
+                                                    max="16384"
+                                                />
+                                            </div>
+
+                                            <div className="form-group">
+                                                <label className="form-label">Volume Type</label>
+                                                <select
+                                                    className="form-select"
+                                                    value={selectedComponent.volume_type || 'gp2'}
+                                                    onChange={(e) => updateComponentProperty(selectedComponent.id, 'volume_type', e.target.value)}
+                                                >
+                                                    <option value="gp2">General Purpose (gp2)</option>
+                                                    <option value="gp3">General Purpose (gp3)</option>
+                                                    <option value="io1">Provisioned IOPS (io1)</option>
+                                                    <option value="st1">Throughput Optimized (st1)</option>
+                                                    <option value="sc1">Cold Storage (sc1)</option>
+                                                </select>
+                                            </div>
+
+                                            {selectedComponent.volume_type === 'io1' && (
+                                                <div className="form-group">
+                                                    <label className="form-label">IOPS</label>
+                                                    <input
+                                                        type="number"
+                                                        className="form-input"
+                                                        value={selectedComponent.iops || 100}
+                                                        onChange={(e) => updateComponentProperty(selectedComponent.id, 'iops', parseInt(e.target.value) || 100)}
+                                                        min="100"
+                                                        max="64000"
+                                                    />
+                                                </div>
+                                            )}
+                                            </>
+                                        )}
+
                                         {(selectedComponent.type === 'vpc' || selectedComponent.type === 'subnet') && (
                                             <div className="form-group">
                                                 <label className="form-label">CIDR Block</label>
