@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import axios from 'axios';
-import CanvasContainer from './components/CanvasContainer';
+import HierarchicalCanvasContainer from './components/HierarchicalCanvasContainer';
 import CostSummary from './components/CostSummary';
 import GenerateTerraform from './components/GenerateTerraform';
 import RenameModal from './components/RenameModal';
@@ -108,15 +108,26 @@ function App() {
 
     return (
         <div className="App">
-            <h1>Cloud Design Tool</h1>
+            <h1>Cloud Architecture Designer</h1>
             <p className={backendStatus === 'Backend connected' ? 'connected' : 'not-connected'}>
                 {backendStatus}
             </p>
             <div className="main-container">
-                <CanvasContainer />
+                <HierarchicalCanvasContainer />
                 <CostSummary totalCost={totalCost} />
             </div>
             <GenerateTerraform />
+
+            {/* Instructions for hierarchical model */}
+            <div className="hierarchical-instructions">
+                <h3>Using the Hierarchical Model:</h3>
+                <ul>
+                    <li>VPCs contain Subnets</li>
+                    <li>Subnets contain resources (EC2, RDS, etc.)</li>
+                    <li>Drag resources into their containers or use the connection tool</li>
+                    <li>Container relationships appear as visual nesting rather than lines</li>
+                </ul>
+            </div>
 
             {/* Rename Modal */}
             {renameModalOpen && selectedComponent && (
