@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { Group, Rect, Line, Text } from 'react-konva';
 import AwsIcon from './AwsIcon';
 import ContainerComponent from './ContainerComponent';
-import ConnectionLine from './ConnectionLine';
+import ConnectionLine from './canvas/ConnectionLine';
 import { validateConnection } from '../services/connectionValidator';
 
 function HierarchicalCanvas({

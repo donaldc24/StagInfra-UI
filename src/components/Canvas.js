@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { Rect, Line, Text, Group } from 'react-konva';
 import AwsIcon from './AwsIcon';
-import ConnectionLine from './ConnectionLine';
+import ConnectionLine from './canvas/ConnectionLine';
 import { validateConnection } from '../services/connectionValidator';
 
 function Canvas({
