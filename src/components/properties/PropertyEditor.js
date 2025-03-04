@@ -1,6 +1,6 @@
 // src/components/PropertyEditor.js
 import React, { useState, useEffect } from 'react';
-import useDebouncedUpdate from '../hooks/useDebouncedUpdate';
+import useDebouncedUpdate from '../../hooks/useDebouncedUpdate';
 
 const PropertyEditor = ({ component, onPropertyChange }) => {
     // Local state to track property values during editing

@@ -1,6 +1,6 @@
 // src/components/PropertyPanel.js
 import React, { useState, useEffect, memo } from 'react';
-import PropertyEditor from './PropertyEditor';
+import PropertyEditor from '../properties/PropertyEditor';
 
 const PropertyPanel = memo(({
                                 isOpen,
