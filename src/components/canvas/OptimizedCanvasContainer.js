@@ -313,10 +313,10 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification }) => {
         }));
 
         // Use regular showNotification for movement
-        showNotification(
-            `${component.type.toUpperCase()} component moved`,
-            'info'
-        );
+        // showNotification(
+        //     `${component.type.toUpperCase()} component moved`,
+        //     'info'
+        // );
     }, [dispatch, canvasComponents, canvasSize, showNotification, findContainerAt]);
 
 // Create a debounced version of showNotification outside of the component
@@ -374,10 +374,10 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification }) => {
         });
 
         // Show notification
-        showNotification && showNotification(
-            `${container.type.toUpperCase()} container moved`,
-            'info'
-        );
+        // showNotification && showNotification(
+        //     `${container.type.toUpperCase()} container moved`,
+        //     'info'
+        // );
 
         // Check if dropped in trash area
         const stage = stageRef.current.getStage();
@@ -407,10 +407,10 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification }) => {
             showNotification && showNotification('Container and its contents deleted', 'success');
         }
 
-        debouncedShowNotification(
-            `${container.type.toUpperCase()} container moved`,
-            'info'
-        );
+        // debouncedShowNotification(
+        //     `${container.type.toUpperCase()} container moved`,
+        //     'info'
+        // );
     }, [canvasComponents, dispatch, organizedComponents.containedComponents, showNotification, canvasSize.width, debouncedShowNotification]);
 
     // Render connections between components
