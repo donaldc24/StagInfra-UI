@@ -1,15 +1,13 @@
+// src/components/canvas/OptimizedCanvasContainer.js
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
-import { Stage, Layer, Group } from 'react-konva';
+import { Stage, Layer } from 'react-konva';
 import { useDispatch, useSelector } from 'react-redux';
-import { ZoomIn, ZoomOut, Move, X, Plus, Layers, Trash2 } from 'lucide-react';
+import { ZoomIn, ZoomOut, Move, X, Layers, Trash2 } from 'lucide-react';
 
 // Import actions
 import {
-    setDraggingComponent,
-    addComponent,
     updateComponentPosition,
     selectComponents,
-    selectDraggingComponent,
     removeComponent
 } from '../../store/slices/componentsSlice';
 
@@ -19,7 +17,6 @@ import {
 } from '../../store/slices/uiStateSlice';
 
 import {
-    addConnection,
     removeConnection,
     removeComponentConnections
 } from '../../store/slices/connectionsSlice';
@@ -27,38 +24,27 @@ import {
 // Import components
 import AwsComponent from './AwsComponent';
 import ConnectionLine from './ConnectionLine';
-import ContainerComponent from './ContainerComponent';
 import CanvasGrid from './CanvasGrid';
 
-// Import utilities
-import { getComponentMetadata, getDefaultProperties } from '../../services/hierarchicalAwsComponentRegistry';
-import { validateConnection } from '../../services/hierarchicalConnectionValidator';
-
 // Import custom hooks
-import useConnectionMode from '../../hooks/useConnectionMode';
 import useCanvasControls from '../../hooks/useCanvasControls';
-import useNotification from '../../hooks/useNotification';
 
-/**
- * Canvas Container component - the main drawing area for the application
- * This implementation improves performance and fixes existing issues
- */
-const OptimizedCanvasContainer = ({ onComponentSelect, showNotification: propShowNotification }) => {
+const OptimizedCanvasContainer = ({ onComponentSelect, showNotification }) => {
     const dispatch = useDispatch();
     const stageRef = useRef(null);
 
     // Redux state
     const canvasComponents = useSelector(selectComponents);
     const connections = useSelector(state => state.connections);
-    const draggingComponent = useSelector(selectDraggingComponent);
     const { isLineMode, lineStart } = useSelector(state => state.uiState);
 
     // Local state
-    const [selectedComponent, setSelectedComponent] = useState(null);
-    const [selectedConnection, setSelectedConnection] = useState(null);
+    const [selectedComponentId, setSelectedComponentId] = useState(null);
+    const [selectedConnectionId, setSelectedConnectionId] = useState(null);
+    const [ghostLine, setGhostLine] = useState(null);
+    const [isDragging, setIsDragging] = useState(false);
 
-    // Custom hooks
-    const { notifications, showNotification } = useNotification();
+    // Canvas controls (zoom, pan)
     const {
         scale,
         position,
@@ -68,586 +54,210 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification: propSho
         resetView
     } = useCanvasControls();
 
-    // Get the notification function, either from props or local hook
-    const notify = propShowNotification || showNotification;
+    // Debug information
+    useEffect(() => {
+        console.log('Canvas components:', canvasComponents);
+    }, [canvasComponents]);
 
-    const {
-        ghostLine,
-        handleConnectionStart,
-        handleConnectionMove,
-        handleConnectionComplete,
-        handleConnectionCancel
-    } = useConnectionMode(stageRef, canvasComponents, connections, dispatch, notify);
-
-    // Helper function for drag debugging
-    const updateDragDebug = (message) => {
-        const debugContent = document.getElementById('drag-debug-content');
-        if (debugContent) {
-            debugContent.innerHTML = message;
-        }
-    };
-
-    // Memoized canvas size
+    // Calculate canvas size
     const canvasSize = useMemo(() => ({
-        width: window.innerWidth - 300, // Adjust based on sidebar width
-        height: window.innerHeight - 60 // Adjust based on header height
+        width: window.innerWidth - 300,  // Adjust based on sidebar width
+        height: window.innerHeight - 60  // Adjust based on header height
     }), []);
-
-    // Add debugging information
-    useEffect(() => {
-        console.log('Rendering OptimizedCanvasContainer with:');
-        console.log('- Canvas components:', canvasComponents.length);
-        console.log('- Connections:', connections.length);
-        console.log('- isLineMode:', isLineMode);
-        console.log('- lineStart:', lineStart);
-        console.log('- draggingComponent:', draggingComponent);
-
-        // Log available component types
-        try {
-            const { debugComponentRegistry } = require('../../services/hierarchicalAwsComponentRegistry');
-            console.log('Available component types:', debugComponentRegistry());
-        } catch (error) {
-            console.log('Could not log component registry:', error);
-        }
-
-        // Add debugging styles to help visualize the overlay
-        const style = document.createElement('style');
-        style.innerHTML = `
-            .component-drop-overlay {
-                pointer-events: none;
-            }
-            
-            .component-drop-overlay.debug {
-                background-color: rgba(255, 0, 0, 0.1);
-                border: 1px dashed red;
-            }
-        `;
-        document.head.appendChild(style);
-
-        // Add key event listener for toggling debug mode
-        const handleKeyDown = (e) => {
-            // Press 'D' to toggle debug mode
-            if (e.key.toLowerCase() === 'd' && e.ctrlKey) {
-                const overlay = document.querySelector('.component-drop-overlay');
-                if (overlay) {
-                    overlay.classList.toggle('debug');
-                    console.log('Debug mode toggled for drop overlay');
-                }
-
-                // Toggle drag debug panel
-                const debugPanel = document.querySelector('.drag-debug-panel');
-                if (debugPanel) {
-                    debugPanel.style.display = debugPanel.style.display === 'none' ? 'block' : 'none';
-                }
-            }
-
-            // Press 'E' to toggle event debugging
-            if (e.key.toLowerCase() === 'e' && e.ctrlKey) {
-                const debugOverlay = document.querySelector('.event-debug-overlay');
-                if (debugOverlay) {
-                    debugOverlay.style.display = debugOverlay.style.display === 'none' ? 'block' : 'none';
-                    console.log('Event debugging toggled:', debugOverlay.style.display);
-                }
-            }
-        };
-
-        window.addEventListener('keydown', handleKeyDown);
-
-        return () => {
-            window.removeEventListener('keydown', handleKeyDown);
-            document.head.removeChild(style);
-        };
-    }, [canvasComponents.length, connections.length, isLineMode, lineStart, draggingComponent]);
-
-    // Special debugging for event handling issues
-    useEffect(() => {
-        const debugEvent = (e) => {
-            const debugOverlay = document.querySelector('.event-debug-overlay');
-            if (debugOverlay && debugOverlay.style.display === 'block') {
-                debugOverlay.textContent = `Event at (${e.clientX}, ${e.clientY}) on ${e.target.tagName || 'unknown'}`;
-
-                // Create a temporary indicator where the click happened
-                const indicator = document.createElement('div');
-                indicator.style.position = 'absolute';
-                indicator.style.left = `${e.clientX}px`;
-                indicator.style.top = `${e.clientY}px`;
-                indicator.style.width = '10px';
-                indicator.style.height = '10px';
-                indicator.style.borderRadius = '50%';
-                indicator.style.backgroundColor = 'red';
-                indicator.style.zIndex = '9999';
-                document.body.appendChild(indicator);
-
-                // Remove after 1 second
-                setTimeout(() => {
-                    document.body.removeChild(indicator);
-                }, 1000);
-            }
-        };
-
-        document.addEventListener('click', debugEvent);
-
-        return () => {
-            document.removeEventListener('click', debugEvent);
-        };
-    }, []);
 
     // Handle window resize
     useEffect(() => {
         const handleResize = () => {
-            // Update canvas size if needed
-            console.log('Window resized');
+            if (stageRef.current) {
+                const stage = stageRef.current.getStage();
+                stage.width(window.innerWidth - 300);
+                stage.height(window.innerHeight - 60);
+            }
         };
 
         window.addEventListener('resize', handleResize);
         return () => window.removeEventListener('resize', handleResize);
     }, []);
 
-    // Key event handlers
-    useEffect(() => {
-        const handleKeyDown = (e) => {
-            console.log('Key pressed:', e.key);
-
-            // Delete selected component
-            if (e.key === 'Delete' && selectedComponent) {
-                dispatch(removeComponent(selectedComponent.id));
-                dispatch(removeComponentConnections(selectedComponent.id));
-                setSelectedComponent(null);
-                notify('Component deleted', 'info');
-            }
-
-            // Delete selected connection
-            if (e.key === 'Delete' && selectedConnection) {
-                dispatch(removeConnection(selectedConnection));
-                setSelectedConnection(null);
-                notify('Connection deleted', 'info');
-            }
-
-            // Escape to cancel connection mode
-            if (e.key === 'Escape' && isLineMode) {
-                dispatch(setLineMode(false));
-                dispatch(setLineStart(null));
-                handleConnectionCancel();
-            }
-        };
-
-        window.addEventListener('keydown', handleKeyDown);
-
-        return () => {
-            window.removeEventListener('keydown', handleKeyDown);
-        };
-    }, [selectedComponent, selectedConnection, isLineMode, dispatch, notify, handleConnectionCancel]);
-
-    /**
-     * Handle component selection
-     * @param {Object} component - The component to select
-     * @param {Event} e - The event object
-     */
+    // Handle component click
     const handleComponentClick = useCallback((e, component) => {
-        e.cancelBubble = true; // Stop propagation in Konva
-        if (e.evt) {
-            e.evt.preventDefault();
-        }
+        e.cancelBubble = true;
 
         console.log('Component clicked:', component);
 
         if (isLineMode) {
             if (!lineStart) {
-                // Start connection from this component
-                handleConnectionStart(component);
+                // Start a connection
+                dispatch(setLineStart(component));
+                // Create ghost line
+                const sourceX = component.x + (component.width || 40) / 2;
+                const sourceY = component.y + (component.height || 40) / 2;
+                setGhostLine({
+                    points: [sourceX, sourceY, sourceX, sourceY]
+                });
+
+                showNotification && showNotification(
+                    `Select a target to connect from ${component.name || component.type}`,
+                    'info'
+                );
             } else if (lineStart.id !== component.id) {
-                // Complete connection to this component
-                handleConnectionComplete(component);
+                // Complete the connection
+                // TODO: Add your connection validation and creation logic here
+
+                // Reset the line drawing state
+                dispatch(setLineStart(null));
+                setGhostLine(null);
             }
         } else {
-            // Normal selection - notify parent component
-            setSelectedComponent(prev => prev?.id === component.id ? null : component);
-
-            // Also dispatch an event for parent components to listen to
+            // Normal selection
+            setSelectedComponentId(component.id);
             if (onComponentSelect) {
                 onComponentSelect(component);
             }
 
-            // Emit a custom event as a backup communication channel
-            const event = new CustomEvent('component-selected', {
-                detail: { component }
-            });
-            window.dispatchEvent(event);
-
-            setSelectedConnection(null);
+            // Deselect connection
+            setSelectedConnectionId(null);
         }
-    }, [isLineMode, lineStart, handleConnectionStart, handleConnectionComplete, setSelectedComponent, setSelectedConnection, onComponentSelect]);
+    }, [dispatch, isLineMode, lineStart, onComponentSelect, showNotification]);
 
-    /**
-     * Handle stage background click (deselect everything)
-     */
+    // Handle stage click (deselect everything)
     const handleStageClick = useCallback((e) => {
-        // Only handle clicks directly on the stage, not on components
+        // Only handle clicks directly on the stage
         if (e.target === e.currentTarget) {
             console.log('Stage background clicked');
-            setSelectedComponent(null);
-            setSelectedConnection(null);
+            setSelectedComponentId(null);
+            setSelectedConnectionId(null);
 
+            if (onComponentSelect) {
+                onComponentSelect(null);
+            }
+
+            // Cancel any ongoing line drawing
             if (isLineMode && lineStart) {
-                handleConnectionCancel();
+                dispatch(setLineStart(null));
+                setGhostLine(null);
             }
         }
-    }, [isLineMode, lineStart, handleConnectionCancel]);
+    }, [dispatch, isLineMode, lineStart, onComponentSelect]);
 
-    /**
-     * Handle component dragging
-     * @param {Event} e - The drag event
-     * @param {string} componentId - ID of the component being dragged
-     */
+    // Handle mouse move for drawing connections
+    const handleMouseMove = useCallback((e) => {
+        if (isLineMode && ghostLine && lineStart) {
+            const stage = e.target.getStage();
+            const point = stage.getPointerPosition();
+            const sourceX = ghostLine.points[0];
+            const sourceY = ghostLine.points[1];
+
+            setGhostLine({
+                points: [
+                    sourceX,
+                    sourceY,
+                    (point.x - stage.x()) / stage.scaleX(),
+                    (point.y - stage.y()) / stage.scaleY()
+                ]
+            });
+        }
+    }, [isLineMode, ghostLine, lineStart]);
+
+    // Handle component dragging
+    const handleDragStart = useCallback((e, componentId) => {
+        setIsDragging(true);
+        const component = canvasComponents.find(c => c.id === componentId);
+        if (!component) return;
+
+        console.log(`Component ${componentId} drag started`);
+    }, [canvasComponents]);
+
     const handleDragMove = useCallback((e, componentId) => {
-        console.log('DRAG MOVE EVENT:', e);
-        console.log('Component position during drag:', e.target.x(), e.target.y());
+        if (!isDragging) return;
 
-        if (!componentId) {
-            console.warn('No component ID provided to drag handler');
-            return;
-        }
+        // Optional: Update component position in real-time
+        // This could be useful for showing live updates to connections
+    }, [isDragging]);
 
-        try {
-            // Get the component's new position from the event
-            const newPosition = {
-                x: e.target.x(),
-                y: e.target.y()
-            };
+    const handleDragEnd = useCallback((e, componentId) => {
+        setIsDragging(false);
+        const component = canvasComponents.find(c => c.id === componentId);
+        if (!component) return;
 
-            // Update drag debug panel
-            updateDragDebug(`Moving ${componentId} to ${JSON.stringify(newPosition)}`);
+        // Get the new position
+        const newX = e.target.x();
+        const newY = e.target.y();
 
-            console.log(`Component ${componentId} moved to:`, newPosition);
+        console.log(`Component ${componentId} dragged to:`, { x: newX, y: newY });
 
-            // Update component position in Redux
-            dispatch(updateComponentPosition({
-                id: componentId,
-                position: newPosition
-            }));
+        // Dispatch position update
+        dispatch(updateComponentPosition({
+            id: componentId,
+            position: { x: newX, y: newY }
+        }));
 
-            // If it's a container, need to update contained components' positions
-            // (This would be for a more advanced implementation)
-        } catch (error) {
-            console.error('Error in handleDragMove:', error);
-            updateDragDebug(`Error in drag move: ${error.message}`);
-        }
-    }, [dispatch]);
-
-    /**
-     * Check if a position is inside a component's boundaries
-     * @param {Object} position - The position {x, y} to check
-     * @param {Object} component - The component to check against
-     * @returns {boolean} - Whether the position is inside the component
-     */
-    const isPositionInComponent = useCallback((position, component) => {
-        const result = (
-            position.x >= component.x &&
-            position.x <= component.x + (component.width || 40) &&
-            position.y >= component.y &&
-            position.y <= component.y + (component.height || 40)
+        // Show notification
+        showNotification && showNotification(
+            `${component.type.toUpperCase()} component moved`,
+            'info'
         );
 
-        console.log(`Position (${position.x}, ${position.y}) is${result ? '' : ' not'} inside component ${component.id} at (${component.x}, ${component.y}) with size (${component.width || 40}, ${component.height || 40})`);
+        // Check if dropped in trash area
+        const stage = stageRef.current.getStage();
+        const stageRect = stage.container().getBoundingClientRect();
+        const pointerPosition = stage.getPointerPosition();
 
-        return result;
-    }, []);
+        // Define trash area bounds (top right corner)
+        const inTrashArea = (
+            pointerPosition.x > (canvasSize.width - 150) &&
+            pointerPosition.y < 150
+        );
 
-    /**
-     * Try to place a component in a container (VPC or subnet)
-     * @param {Object} component - The component to place
-     * @param {Object} position - The position {x, y} to check
-     */
-    const tryPlaceInContainer = useCallback((component, position) => {
-        console.log(`Trying to place component ${component.id} at position (${position.x}, ${position.y})`);
-
-        // Don't try to place container components inside other containers
-        if (component.type === 'vpc') return;
-
-        // For subnet, only check if it's in a VPC
-        if (component.type === 'subnet') {
-            const vpcs = canvasComponents.filter(c => c.type === 'vpc');
-            console.log(`Found ${vpcs.length} VPCs to check for placement`);
-
-            for (const vpc of vpcs) {
-                if (isPositionInComponent(position, vpc)) {
-                    console.log(`Component position is inside VPC ${vpc.id}`);
-                    const validation = validateConnection(component, vpc, canvasComponents, connections);
-
-                    if (validation.valid) {
-                        // Check if subnet is already in another VPC
-                        const existingConnection = connections.find(conn =>
-                            (conn.from === component.id && canvasComponents.find(c => c.id === conn.to)?.type === 'vpc') ||
-                            (conn.to === component.id && canvasComponents.find(c => c.id === conn.from)?.type === 'vpc')
-                        );
-
-                        if (existingConnection) {
-                            console.log(`Removing existing connection ${existingConnection.id}`);
-                            // Remove existing connection
-                            dispatch(removeConnection(existingConnection.id));
-                        }
-
-                        // Add new connection
-                        const connectionId = `${component.id}-${vpc.id}`;
-                        console.log(`Adding new connection ${connectionId}`);
-                        dispatch(addConnection({
-                            id: connectionId,
-                            from: component.id,
-                            to: vpc.id
-                        }));
-
-                        notify(`Placed subnet in ${vpc.name || 'VPC'}`, 'success');
-                    } else {
-                        notify(validation.message, 'error');
-                    }
-                    return;
-                }
-            }
-        } else {
-            // For non-subnet components, check if they're in a subnet
-            const subnets = canvasComponents.filter(c => c.type === 'subnet');
-            console.log(`Found ${subnets.length} subnets to check for placement`);
-
-            for (const subnet of subnets) {
-                if (isPositionInComponent(position, subnet)) {
-                    console.log(`Component position is inside subnet ${subnet.id}`);
-                    const validation = validateConnection(component, subnet, canvasComponents, connections);
-
-                    if (validation.valid) {
-                        // Check if resource is already in another subnet
-                        const existingConnection = connections.find(conn =>
-                            (conn.from === component.id && canvasComponents.find(c => c.id === conn.to)?.type === 'subnet') ||
-                            (conn.to === component.id && canvasComponents.find(c => c.id === conn.from)?.type === 'subnet')
-                        );
-
-                        if (existingConnection) {
-                            console.log(`Removing existing connection ${existingConnection.id}`);
-                            // Remove existing connection
-                            dispatch(removeConnection(existingConnection.id));
-                        }
-
-                        // Add new connection
-                        const connectionId = `${component.id}-${subnet.id}`;
-                        console.log(`Adding new connection ${connectionId}`);
-                        dispatch(addConnection({
-                            id: connectionId,
-                            from: component.id,
-                            to: subnet.id
-                        }));
-
-                        notify(`Placed resource in ${subnet.name || 'subnet'}`, 'success');
-                    } else {
-                        notify(validation.message, 'error');
-                    }
-                    return;
-                }
-            }
+        if (inTrashArea) {
+            dispatch(removeComponent(componentId));
+            dispatch(removeComponentConnections(componentId));
+            setSelectedComponentId(null);
+            showNotification && showNotification('Component deleted', 'success');
         }
-    }, [dispatch, canvasComponents, connections, notify, isPositionInComponent]);
+    }, [dispatch, canvasComponents, canvasSize, showNotification]);
 
-    /**
-     * Handle component drag end
-     * @param {Event} e - The drag end event
-     * @param {string} componentId - ID of the component that was dragged
-     */
-    const handleDragEnd = useCallback((e, componentId) => {
-        if (!componentId) {
-            console.warn('No component ID provided to drag end handler');
-            return;
-        }
+    // Handle component deletion
+    const handleDeleteComponent = useCallback((componentId) => {
+        dispatch(removeComponent(componentId));
+        dispatch(removeComponentConnections(componentId));
+        setSelectedComponentId(null);
 
-        try {
-            if (!stageRef.current) {
-                console.warn('Stage reference not available');
-                return;
-            }
+        showNotification && showNotification(
+            'Component deleted',
+            'success'
+        );
+    }, [dispatch, showNotification]);
 
-            const stage = stageRef.current.getStage();
-            const pointerPosition = stage.getPointerPosition();
-            const component = canvasComponents.find(c => c.id === componentId);
-
-            if (!component) {
-                console.warn(`Component with ID ${componentId} not found`);
-                return;
-            }
-
-            // Update drag debug panel
-            updateDragDebug(`Drag ended for ${componentId}`);
-
-            console.log(`Component ${componentId} drag ended at:`, pointerPosition);
-
-            // Final position update to ensure accuracy
-            const finalPosition = {
-                x: e.target.x(),
-                y: e.target.y()
-            };
-
-            // Update component position in Redux one last time
-            dispatch(updateComponentPosition({
-                id: componentId,
-                position: finalPosition
-            }));
-
-            // Check if component is dropped in trash area
-            // Adjust these values according to your UI layout
-            const inTrashArea =
-                pointerPosition.x > (canvasSize.width - 200) &&
-                pointerPosition.y < 150;
-
-            if (inTrashArea) {
-                console.log(`Component ${componentId} dropped in trash area`);
-                // Delete the component
-                dispatch(removeComponent(componentId));
-                dispatch(removeComponentConnections(componentId));
-                setSelectedComponent(null);
-                notify(`Deleted ${component.type} component`, 'success');
-            } else {
-                // Check if dropping into a container
-                tryPlaceInContainer(component, pointerPosition);
-            }
-        } catch (error) {
-            console.error('Error in handleDragEnd:', error);
-            updateDragDebug(`Error in drag end: ${error.message}`);
-        }
-    }, [dispatch, canvasComponents, canvasSize, setSelectedComponent, notify, stageRef, tryPlaceInContainer]);
-
-    /**
-     * Handle dropping a new component onto the canvas
-     * @param {string} componentType - The type of component to add
-     * @param {Object} position - Position {x, y} where to add the component
-     */
-    const handleComponentDrop = useCallback((componentType, position) => {
-        console.log(`Handling component drop: type=${componentType}, position=(${position.x}, ${position.y})`);
-
-        // Only handle valid component types
-        if (!componentType || !getComponentMetadata(componentType)) {
-            console.warn('Invalid component type:', componentType);
-            return;
-        }
-
-        // Get default properties
-        const defaultProps = getDefaultProperties(componentType);
-        const metadata = getComponentMetadata(componentType);
-
-        // Set dimensions based on component type
-        let width = 40;
-        let height = 40;
-
-        if (componentType === 'vpc') {
-            width = 300;
-            height = 250;
-        } else if (componentType === 'subnet') {
-            width = 200;
-            height = 150;
-        }
-
-        // Create new component
-        const newComponent = {
-            id: `${componentType}-${Date.now()}`,
-            x: position.x,
-            y: position.y,
-            width,
-            height,
-            type: componentType,
-            ...defaultProps
-        };
-
-        console.log('Creating new component:', newComponent);
-
-        // Add to Redux store
-        dispatch(addComponent(newComponent));
-        setSelectedComponent(newComponent);
-        notify(`Added new ${metadata.displayName || componentType}`, 'success');
-
-        // Try to place in container
-        tryPlaceInContainer(newComponent, position);
-    }, [dispatch, setSelectedComponent, notify, tryPlaceInContainer]);
-
-    /**
-     * Handle mouse move on stage
-     * @param {Event} e - The mouse move event
-     */
-    const handleMouseMove = useCallback((e) => {
-        if (isLineMode && lineStart) {
-            handleConnectionMove(e);
-        }
-    }, [isLineMode, lineStart, handleConnectionMove]);
-
-    /**
-     * Handle connection deletion
-     * @param {string} connectionId - ID of the connection to delete
-     */
-    const handleDeleteConnection = useCallback((connectionId) => {
-        dispatch(removeConnection(connectionId));
-        setSelectedConnection(null);
-        notify('Connection deleted', 'info');
-        console.log(`Connection ${connectionId} deleted`);
-    }, [dispatch, notify]);
-
-    /**
-     * Render connection lines between components
-     */
+    // Render connections between components
     const renderConnections = useMemo(() => {
-        // Filter out containment connections (VPC-subnet, subnet-resource)
-        // as those are represented visually by nesting
-        const nonContainmentConnections = connections.filter(conn => {
-            const sourceComp = canvasComponents.find(c => c.id === conn.from);
-            const targetComp = canvasComponents.find(c => c.id === conn.to);
+        return connections.map(conn => {
+            const source = canvasComponents.find(c => c.id === conn.from);
+            const target = canvasComponents.find(c => c.id === conn.to);
 
-            if (!sourceComp || !targetComp) return false;
-
-            // Skip VPC-subnet connections
-            if (
-                (sourceComp.type === 'vpc' && targetComp.type === 'subnet') ||
-                (sourceComp.type === 'subnet' && targetComp.type === 'vpc')
-            ) {
-                return false;
-            }
-
-            // Skip subnet-resource connections
-            const resourceToSubnetMap = new Map();
-            connections.forEach(c => {
-                const fromComp = canvasComponents.find(comp => comp.id === c.from);
-                const toComp = canvasComponents.find(comp => comp.id === c.to);
-
-                if (fromComp && toComp) {
-                    if (fromComp.type !== 'vpc' && fromComp.type !== 'subnet' && toComp.type === 'subnet') {
-                        resourceToSubnetMap.set(fromComp.id, toComp.id);
-                    } else if (toComp.type !== 'vpc' && toComp.type !== 'subnet' && fromComp.type === 'subnet') {
-                        resourceToSubnetMap.set(toComp.id, fromComp.id);
-                    }
-                }
-            });
-
-            if (resourceToSubnetMap.has(sourceComp.id) || resourceToSubnetMap.has(targetComp.id)) {
-                return false;
-            }
-
-            return true;
-        });
-
-        return nonContainmentConnections.map(conn => {
-            const sourceComp = canvasComponents.find(c => c.id === conn.from);
-            const targetComp = canvasComponents.find(c => c.id === conn.to);
-
-            if (!sourceComp || !targetComp) return null;
+            if (!source || !target) return null;
 
             return (
                 <ConnectionLine
                     key={conn.id}
                     connection={conn}
-                    sourceComponent={sourceComp}
-                    targetComponent={targetComp}
-                    isSelected={selectedConnection === conn.id}
-                    onClick={() => setSelectedConnection(conn.id)}
-                    onDelete={() => handleDeleteConnection(conn.id)}
+                    sourceComponent={source}
+                    targetComponent={target}
+                    isSelected={selectedConnectionId === conn.id}
+                    onClick={() => setSelectedConnectionId(conn.id)}
+                    onDelete={() => {
+                        dispatch(removeConnection(conn.id));
+                        setSelectedConnectionId(null);
+                        showNotification && showNotification('Connection deleted', 'success');
+                    }}
                 />
             );
         });
-    }, [canvasComponents, connections, selectedConnection, handleDeleteConnection]);
+    }, [canvasComponents, connections, selectedConnectionId, dispatch, showNotification]);
 
     return (
         <div className="canvas-container relative h-full w-full">
+            {/* Main canvas */}
             <Stage
                 ref={stageRef}
                 width={canvasSize.width}
@@ -661,26 +271,31 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification: propSho
                 onWheel={handleWheel}
             >
                 <Layer>
-                    <CanvasGrid width={canvasSize.width} height={canvasSize.height} scale={scale} />
+                    {/* Render grid */}
+                    <CanvasGrid
+                        width={canvasSize.width}
+                        height={canvasSize.height}
+                        scale={scale}
+                    />
 
-                    {/* Render components first */}
+                    {/* Render components */}
                     {canvasComponents.map(component => (
                         <AwsComponent
                             key={component.id}
                             component={component}
-                            isSelected={selectedComponent?.id === component.id}
+                            isSelected={selectedComponentId === component.id}
                             isConnectable={isLineMode}
-                            isValidTarget={isLineMode && lineStart && lineStart.id !== component.id}
                             onClick={handleComponentClick}
-                            onDragMove={handleDragMove}
-                            onDragEnd={handleDragEnd}
+                            onDragStart={(e) => handleDragStart(e, component.id)}
+                            onDragMove={(e) => handleDragMove(e, component.id)}
+                            onDragEnd={(e) => handleDragEnd(e, component.id)}
                         />
                     ))}
 
-                    {/* Then render connections */}
+                    {/* Render connections */}
                     {renderConnections}
 
-                    {/* Render ghost line */}
+                    {/* Render ghost line for connection drawing */}
                     {ghostLine && (
                         <ConnectionLine
                             isGhost={true}
@@ -689,7 +304,6 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification: propSho
                     )}
                 </Layer>
             </Stage>
-
 
             {/* Zoom controls */}
             <div className="zoom-controls">
@@ -727,45 +341,31 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification: propSho
                 <span className="trash-text">Drop to Delete</span>
             </div>
 
-            {/* Drag Debug Overlay - only visible in debug mode */}
+            {/* Debug overlay - add ?debug to URL to show */}
             <div
-                className="drag-debug-panel"
                 style={{
-                    display: 'none', // Set to 'block' to enable
                     position: 'absolute',
                     top: 10,
                     left: 10,
-                    backgroundColor: 'rgba(0,0,0,0.7)',
+                    background: 'rgba(0,0,0,0.7)',
                     color: 'white',
-                    padding: '10px',
-                    borderRadius: '4px',
-                    fontSize: '12px',
-                    zIndex: 1000,
-                    maxWidth: '300px'
+                    padding: 10,
+                    fontSize: 12,
+                    display: window.location.search.includes('debug') ? 'block' : 'none',
+                    zIndex: 1000
                 }}
             >
-                <h4 style={{margin: '0 0 5px 0'}}>Drag Debug Info</h4>
-                <div id="drag-debug-content">No drag events yet</div>
-            </div>
-
-            {/* Event Debugging Overlay */}
-            <div
-                className="event-debug-overlay"
-                style={{
-                    position: 'absolute',
-                    top: 10,
-                    left: 200,
-                    backgroundColor: 'rgba(255, 0, 0, 0.7)',
-                    color: 'white',
-                    padding: '10px',
-                    borderRadius: '4px',
-                    fontSize: '12px',
-                    zIndex: 9999,
-                    pointerEvents: 'none',
-                    display: 'none' // Toggle to 'block' with Ctrl+E
-                }}
-            >
-                Click anywhere to test event handling
+                <div>Components: {canvasComponents.length}</div>
+                <div>Scale: {scale.toFixed(2)}</div>
+                <div>Selected: {selectedComponentId || 'none'}</div>
+                <div>Position: ({position.x.toFixed(0)}, {position.y.toFixed(0)})</div>
+                {selectedComponentId && (
+                    <div>
+                        Selected Component: {
+                        canvasComponents.find(c => c.id === selectedComponentId)?.type
+                    }
+                    </div>
+                )}
             </div>
         </div>
     );
