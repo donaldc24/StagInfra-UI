@@ -1,5 +1,5 @@
 // src/components/CloudArchitectureDesigner.js
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import OptimizedCanvasContainer from './canvas/OptimizedCanvasContainer';
 import { FileCode } from 'lucide-react';
@@ -14,6 +14,7 @@ import useNotification from '../hooks/useNotification';
 
 // Import utilities
 import { getComponentMetadata, getDefaultProperties } from '../services/hierarchicalAwsComponentRegistry';
+import { generateTerraform } from '../services/hierarchicalTerraformGenerator';
 
 // Debug overlay component
 const DebugOverlay = ({ enabled }) => {
@@ -43,12 +44,16 @@ const DebugOverlay = ({ enabled }) => {
 // Main application component
 const CloudArchitectureDesigner = () => {
     const dispatch = useDispatch();
+    const canvasRef = useRef(null);
 
     // Redux state
     const backendStatus = useSelector(state => state.system?.backendStatus || 'disconnected');
     const components = useSelector(state => state.components?.list || []);
+    const connections = useSelector(state => state.connections || []);
     const totalCost = useSelector(state => state.cost?.total || 0);
     const { isLineMode } = useSelector(state => state.uiState);
+    const scale = useSelector(state => state.uiState?.scale || 1);
+    const position = useSelector(state => state.uiState?.position || { x: 0, y: 0 });
 
     // Local state
     const [activeTab, setActiveTab] = useState('add');
@@ -59,6 +64,10 @@ const CloudArchitectureDesigner = () => {
         width: window.innerWidth - 300, // Adjust based on sidebar width
         height: window.innerHeight - 60 // Adjust based on header height
     });
+
+    // Terraform modal state
+    const [terraformModalVisible, setTerraformModalVisible] = useState(false);
+    const [terraformCode, setTerraformCode] = useState('');
 
     // Get notifications service
     const { notifications, showNotification } = useNotification();
@@ -142,15 +151,28 @@ const CloudArchitectureDesigner = () => {
     };
 
     const generateTerraformCode = () => {
-        // This would be implemented to call your terraform generation service
-        showNotification("Terraform code generated successfully!", "success");
+        try {
+            // Generate the terraform code
+            const code = generateTerraform(components, connections);
+
+            // Set the code to state for the modal
+            setTerraformCode(code);
+            setTerraformModalVisible(true);
+
+            showNotification("Terraform code generated successfully!", "success");
+        } catch (error) {
+            console.error("Error generating Terraform code:", error);
+            showNotification("Error generating Terraform code", "error");
+        }
     };
 
     const handleComponentDrop = (e) => {
         e.preventDefault();
 
-        // Get the component type from dataTransfer
-        const componentType = e.dataTransfer.getData('component-type');
+        // Try both data formats for better browser compatibility
+        let componentType = e.dataTransfer.getData('component-type') ||
+            e.dataTransfer.getData('text/plain');
+
         if (!componentType) {
             console.error('No component type in drop data');
             return;
@@ -158,19 +180,29 @@ const CloudArchitectureDesigner = () => {
 
         // Get drop position relative to canvas
         const canvasRect = e.currentTarget.getBoundingClientRect();
-        const x = e.clientX - canvasRect.left;
-        const y = e.clientY - canvasRect.top;
+
+        // Adjust for current zoom level and pan position
+        const x = ((e.clientX - canvasRect.left) / scale) - (position.x / scale);
+        const y = ((e.clientY - canvasRect.top) / scale) - (position.y / scale);
 
         // Create and add the new component
         createNewComponent(componentType, x, y);
     };
 
     const handleAddComponentClick = (componentType) => {
-        // Default center position
-        const x = canvasSize.width / 2 - 20;
-        const y = canvasSize.height / 2 - 20;
+        // Get currently visible canvas area
+        const visibleWidth = canvasSize.width / scale;
+        const visibleHeight = canvasSize.height / scale;
 
-        createNewComponent(componentType, x, y);
+        // Calculate center of visible area
+        const centerX = (position.x * -1 / scale) + (visibleWidth / 2);
+        const centerY = (position.y * -1 / scale) + (visibleHeight / 2);
+
+        // Add small random offset to prevent exact overlapping
+        const offsetX = Math.random() * 30 - 15;
+        const offsetY = Math.random() * 30 - 15;
+
+        createNewComponent(componentType, centerX + offsetX, centerY + offsetY);
     };
 
     const createNewComponent = (componentType, x, y) => {
@@ -184,17 +216,9 @@ const CloudArchitectureDesigner = () => {
         const metadata = getComponentMetadata(componentType);
         const defaultProps = getDefaultProperties(componentType);
 
-        // Set component size based on type
-        let width = 40;
-        let height = 40;
-
-        if (componentType === 'vpc') {
-            width = 300;
-            height = 250;
-        } else if (componentType === 'subnet') {
-            width = 200;
-            height = 150;
-        }
+        // Set component size based on type and metadata
+        let width = metadata.size?.width || 40;
+        let height = metadata.size?.height || 40;
 
         // Create new component
         const newComponent = {
@@ -204,6 +228,7 @@ const CloudArchitectureDesigner = () => {
             y: y,
             width: width,
             height: height,
+            isContainer: metadata.isContainer || false,
             ...defaultProps
         };
 
@@ -218,8 +243,41 @@ const CloudArchitectureDesigner = () => {
         }
     };
 
+    // Render Terraform code modal
+    const renderTerraformModal = () => {
+        if (!terraformModalVisible) return null;
+
+        return (
+            <div className="modal-overlay terraform-modal">
+                <div className="modal-content">
+                    <h3>Generated Terraform Code</h3>
+                    <div className="code-content">
+                        <pre>{terraformCode}</pre>
+                    </div>
+                    <div className="modal-buttons">
+                        <button
+                            onClick={() => {
+                                navigator.clipboard.writeText(terraformCode);
+                                showNotification("Terraform code copied to clipboard", "success");
+                            }}
+                            className="modal-button save-button"
+                        >
+                            Copy to Clipboard
+                        </button>
+                        <button
+                            onClick={() => setTerraformModalVisible(false)}
+                            className="modal-button cancel-button"
+                        >
+                            Close
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
     return (
-        <div className="app-container">
+        <div className="app-container" ref={canvasRef}>
             {/* Debug Overlay */}
             <DebugOverlay enabled={isDebugEnabled} />
 
@@ -256,7 +314,6 @@ const CloudArchitectureDesigner = () => {
                             </div>
                         ))}
                     </div>
-
                     {/* Tab content */}
                     <div className="sidebar-content">
                         {activeTab === 'add' && (
@@ -287,9 +344,10 @@ const CloudArchitectureDesigner = () => {
                                                         onDragStart={(e) => {
                                                             console.log(`Started dragging component: ${item}`);
 
-                                                            // Set both text/plain and application-specific data
+                                                            // Set both text/plain and application-specific data for compatibility
                                                             e.dataTransfer.setData('text/plain', item);
                                                             e.dataTransfer.setData('component-type', item);
+                                                            e.dataTransfer.effectAllowed = 'copy';
 
                                                             // Create a custom drag image (optional)
                                                             const dragImage = document.createElement('div');
@@ -367,7 +425,7 @@ const CloudArchitectureDesigner = () => {
                                                     .map(([key, value]) => (
                                                         <div key={key} className="property-row">
                                                             <span className="property-label">{key.replace('_', ' ')}:</span>
-                                                            <span className="property-value">{value}</span>
+                                                            <span className="property-value">{value.toString()}</span>
                                                         </div>
                                                     ))}
                                             </div>
@@ -696,15 +754,194 @@ const CloudArchitectureDesigner = () => {
                                         )}
 
                                         {(selectedComponent.type === 'vpc' || selectedComponent.type === 'subnet') && (
-                                            <div className="form-group">
-                                                <label className="form-label">CIDR Block</label>
-                                                <input
-                                                    type="text"
-                                                    className="form-input"
-                                                    value={selectedComponent.cidr_block || (selectedComponent.type === 'vpc' ? '10.0.0.0/16' : '10.0.1.0/24')}
-                                                    onChange={(e) => updateComponentProperty(selectedComponent.id, 'cidr_block', e.target.value)}
-                                                />
-                                            </div>
+                                            <>
+                                                <div className="form-group">
+                                                    <label className="form-label">CIDR Block</label>
+                                                    <input
+                                                        type="text"
+                                                        className="form-input"
+                                                        value={selectedComponent.cidr_block || (selectedComponent.type === 'vpc' ? '10.0.0.0/16' : '10.0.1.0/24')}
+                                                        onChange={(e) => updateComponentProperty(selectedComponent.id, 'cidr_block', e.target.value)}
+                                                    />
+                                                </div>
+
+                                                {selectedComponent.type === 'subnet' && (
+                                                    <div className="form-group">
+                                                        <label className="form-label">Availability Zone</label>
+                                                        <select
+                                                            className="form-select"
+                                                            value={selectedComponent.availability_zone || 'us-west-2a'}
+                                                            onChange={(e) => updateComponentProperty(selectedComponent.id, 'availability_zone', e.target.value)}
+                                                        >
+                                                            <option value="us-west-2a">us-west-2a</option>
+                                                            <option value="us-west-2b">us-west-2b</option>
+                                                            <option value="us-west-2c">us-west-2c</option>
+                                                        </select>
+                                                    </div>
+                                                )}
+
+                                                {selectedComponent.type === 'subnet' && (
+                                                    <div className="form-group">
+                                                        <label className="form-label">Public Subnet</label>
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={selectedComponent.public !== false}
+                                                            onChange={(e) => updateComponentProperty(
+                                                                selectedComponent.id,
+                                                                'public',
+                                                                e.target.checked
+                                                            )}
+                                                            style={{ marginLeft: '8px' }}
+                                                        />
+                                                    </div>
+                                                )}
+                                            </>
+                                        )}
+
+                                        {selectedComponent.type === 'rds' && (
+                                            <>
+                                                <div className="form-group">
+                                                    <label className="form-label">Database Engine</label>
+                                                    <select
+                                                        className="form-select"
+                                                        value={selectedComponent.engine || 'mysql'}
+                                                        onChange={(e) => updateComponentProperty(selectedComponent.id, 'engine', e.target.value)}
+                                                    >
+                                                        <option value="mysql">MySQL</option>
+                                                        <option value="postgres">PostgreSQL</option>
+                                                        <option value="mariadb">MariaDB</option>
+                                                        <option value="oracle-se2">Oracle SE2</option>
+                                                        <option value="sqlserver-ex">SQL Server Express</option>
+                                                    </select>
+                                                </div>
+
+                                                <div className="form-group">
+                                                    <label className="form-label">Instance Class</label>
+                                                    <select
+                                                        className="form-select"
+                                                        value={selectedComponent.instance_class || 'db.t2.micro'}
+                                                        onChange={(e) => updateComponentProperty(selectedComponent.id, 'instance_class', e.target.value)}
+                                                    >
+                                                        <option value="db.t2.micro">db.t2.micro</option>
+                                                        <option value="db.t2.small">db.t2.small</option>
+                                                        <option value="db.t2.medium">db.t2.medium</option>
+                                                        <option value="db.m5.large">db.m5.large</option>
+                                                    </select>
+                                                </div>
+
+                                                <div className="form-group">
+                                                    <label className="form-label">Allocated Storage (GB)</label>
+                                                    <input
+                                                        type="number"
+                                                        className="form-input"
+                                                        value={selectedComponent.allocated_storage || 20}
+                                                        onChange={(e) => updateComponentProperty(
+                                                            selectedComponent.id,
+                                                            'allocated_storage',
+                                                            parseInt(e.target.value) || 20
+                                                        )}
+                                                        min="20"
+                                                        max="64000"
+                                                    />
+                                                </div>
+
+                                                <div className="form-group">
+                                                    <label className="form-label">Multi-AZ Deployment</label>
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={selectedComponent.multi_az === true}
+                                                        onChange={(e) => updateComponentProperty(
+                                                            selectedComponent.id,
+                                                            'multi_az',
+                                                            e.target.checked
+                                                        )}
+                                                        style={{ marginLeft: '8px' }}
+                                                    />
+                                                </div>
+                                            </>
+                                        )}
+
+                                        {selectedComponent.type === 'dynamodb' && (
+                                            <>
+                                                <div className="form-group">
+                                                    <label className="form-label">Billing Mode</label>
+                                                    <select
+                                                        className="form-select"
+                                                        value={selectedComponent.billing_mode || 'PROVISIONED'}
+                                                        onChange={(e) => updateComponentProperty(selectedComponent.id, 'billing_mode', e.target.value)}
+                                                    >
+                                                        <option value="PROVISIONED">Provisioned Capacity</option>
+                                                        <option value="PAY_PER_REQUEST">On-Demand (Pay per request)</option>
+                                                    </select>
+                                                </div>
+
+                                                {selectedComponent.billing_mode !== 'PAY_PER_REQUEST' && (
+                                                    <>
+                                                        <div className="form-group">
+                                                            <label className="form-label">Read Capacity Units</label>
+                                                            <input
+                                                                type="number"
+                                                                className="form-input"
+                                                                value={selectedComponent.read_capacity || 5}
+                                                                onChange={(e) => updateComponentProperty(
+                                                                    selectedComponent.id,
+                                                                    'read_capacity',
+                                                                    parseInt(e.target.value) || 5
+                                                                )}
+                                                                min="1"
+                                                                max="40000"
+                                                            />
+                                                        </div>
+
+                                                        <div className="form-group">
+                                                            <label className="form-label">Write Capacity Units</label>
+                                                            <input
+                                                                type="number"
+                                                                className="form-input"
+                                                                value={selectedComponent.write_capacity || 5}
+                                                                onChange={(e) => updateComponentProperty(
+                                                                    selectedComponent.id,
+                                                                    'write_capacity',
+                                                                    parseInt(e.target.value) || 5
+                                                                )}
+                                                                min="1"
+                                                                max="40000"
+                                                            />
+                                                        </div>
+                                                    </>
+                                                )}
+                                            </>
+                                        )}
+
+                                        {selectedComponent.type === 'loadBalancer' && (
+                                            <>
+                                                <div className="form-group">
+                                                    <label className="form-label">Load Balancer Type</label>
+                                                    <select
+                                                        className="form-select"
+                                                        value={selectedComponent.lb_type || 'application'}
+                                                        onChange={(e) => updateComponentProperty(selectedComponent.id, 'lb_type', e.target.value)}
+                                                    >
+                                                        <option value="application">Application Load Balancer</option>
+                                                        <option value="network">Network Load Balancer</option>
+                                                        <option value="classic">Classic Load Balancer</option>
+                                                    </select>
+                                                </div>
+
+                                                <div className="form-group">
+                                                    <label className="form-label">Internal</label>
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={selectedComponent.internal === true}
+                                                        onChange={(e) => updateComponentProperty(
+                                                            selectedComponent.id,
+                                                            'internal',
+                                                            e.target.checked
+                                                        )}
+                                                        style={{ marginLeft: '8px' }}
+                                                    />
+                                                </div>
+                                            </>
                                         )}
                                     </div>
                                 </div>
@@ -733,6 +970,9 @@ const CloudArchitectureDesigner = () => {
                     </button>
                 )}
             </div>
+
+            {/* Terraform Code Modal */}
+            {renderTerraformModal()}
 
             {/* Notification container */}
             <div className="notification-container">
