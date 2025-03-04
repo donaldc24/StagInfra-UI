@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import OptimizedCanvasContainer from './canvas/OptimizedCanvasContainer';
 import { FileCode } from 'lucide-react';
+import PropertyPanel from './PropertyPanel';
 
 // Import actions
 import { setLineMode } from '../store/slices/uiStateSlice';
@@ -148,12 +149,15 @@ const CloudArchitectureDesigner = () => {
     };
 
     const updateComponentProperty = (id, property, value) => {
+        if (!id) return;
+
+        // Update the component in Redux store
         dispatch(updateComponent({
             id,
             changes: { [property]: value }
         }));
 
-        // If the property affects cost, refresh the cost calculation
+        // If the property affects cost, trigger a cost refresh
         const costAffectingProperties = [
             'instance_type', 'instances', 'storage', 'size',
             'volume_type', 'iops', 'instance_class', 'allocated_storage',
@@ -162,8 +166,15 @@ const CloudArchitectureDesigner = () => {
         ];
 
         if (costAffectingProperties.includes(property)) {
-            // Use a small timeout to ensure the component is updated in the state first
-            setTimeout(() => refreshCost(), 10);
+            refreshCost();
+        }
+
+        // Make sure our selected component state is also updated if it's the one being modified
+        if (selectedComponent && selectedComponent.id === id) {
+            setSelectedComponent(prev => ({
+                ...prev,
+                [property]: value
+            }));
         }
     };
 
@@ -387,8 +398,8 @@ const CloudArchitectureDesigner = () => {
                                     {item.substring(0, 2).toUpperCase()}
                                 </div>
                                 <span className="component-name">
-                  {item.toUpperCase()}
-                </span>
+                                    {item.toUpperCase()}
+                                </span>
                             </div>
                         );
                     })}
@@ -437,12 +448,12 @@ const CloudArchitectureDesigner = () => {
                                             '#6b7280'
                         }}></div>
                         <span style={{ fontWeight: 500, fontSize: '0.875rem' }}>
-              {component.name || `${component.type.toUpperCase()}-${component.id.slice(-4)}`}
-            </span>
+                            {component.name || `${component.type.toUpperCase()}-${component.id.slice(-4)}`}
+                        </span>
                     </div>
                     <span className="component-type-badge">
-            {component.type.toUpperCase()}
-          </span>
+                        {component.type.toUpperCase()}
+                    </span>
                 </div>
 
                 <div className="component-properties">
@@ -545,451 +556,32 @@ const CloudArchitectureDesigner = () => {
         );
     };
 
-    // Render the property panel for the selected component
+    // Render the property panel
     const renderPropertyPanel = () => {
-        if (!selectedComponent) return null;
-
         return (
-            <div className="properties-panel" style={{
-                width: isPropertyPanelOpen ? '256px' : '0',
-                overflow: isPropertyPanelOpen ? 'visible' : 'hidden'
-            }}>
-                {isPropertyPanelOpen && (
-                    <>
-                        <div className="panel-header">
-                            <h3 className="panel-title">Properties</h3>
-                            <button
-                                onClick={() => setIsPropertyPanelOpen(false)}
-                                style={{
-                                    background: 'none',
-                                    border: 'none',
-                                    cursor: 'pointer',
-                                    color: '#6b7280',
-                                    display: 'flex'
-                                }}
-                            >
-                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                    <polyline points="6 9 12 15 18 9"></polyline>
-                                </svg>
-                            </button>
-                        </div>
+            <>
+                <PropertyPanel
+                    isOpen={isPropertyPanelOpen}
+                    onClose={() => setIsPropertyPanelOpen(false)}
+                    component={selectedComponent}
+                    onPropertyChange={updateComponentProperty}
+                    onDelete={handleDeleteComponent}
+                    isDebugEnabled={isDebugEnabled}
+                />
 
-                        <div className="panel-content">
-                            <div style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '0.5rem',
-                                marginBottom: '1rem'
-                            }}>
-                                <div style={{
-                                    width: '1rem',
-                                    height: '1rem',
-                                    borderRadius: '9999px',
-                                    backgroundColor: selectedComponent.type === 'ec2' ? '#f97316' :
-                                        selectedComponent.type === 's3' ? '#16a34a' :
-                                            selectedComponent.type === 'vpc' ? '#7c3aed' :
-                                                selectedComponent.type === 'subnet' ? '#6366f1' :
-                                                    '#6b7280'
-                                }}></div>
-                                <h4 style={{ fontWeight: 600 }}>
-                                    {selectedComponent.name || `${selectedComponent.type.toUpperCase()}-${selectedComponent.id.slice(-4)}`}
-                                </h4>
-                                <span className="component-type-badge">
-                  {selectedComponent.type.toUpperCase()}
-                </span>
-                            </div>
-
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                                <div className="form-group">
-                                    <label className="form-label">Name</label>
-                                    <input
-                                        type="text"
-                                        className="form-input"
-                                        value={selectedComponent.name || ''}
-                                        onChange={(e) => updateComponentProperty(selectedComponent.id, 'name', e.target.value)}
-                                        placeholder={`${selectedComponent.type.toUpperCase()}-${selectedComponent.id.slice(-4)}`}
-                                    />
-                                </div>
-
-                                {/* Display position information (for debugging) */}
-                                {isDebugEnabled && (
-                                    <div className="form-group">
-                                        <label className="form-label">Position</label>
-                                        <div style={{ fontSize: '0.875rem', color: '#6b7280' }}>
-                                            X: {selectedComponent.x.toFixed(0)}, Y: {selectedComponent.y.toFixed(0)}
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* Render component-specific property editors */}
-                                {renderComponentProperties()}
-                            </div>
-                        </div>
-                        <div className="panel-footer">
-                            <button
-                                className="btn-danger"
-                                onClick={() => handleDeleteComponent(selectedComponent.id)}
-                            >
-                                Delete Component
-                            </button>
-                        </div>
-                    </>
+                {/* Collapsed property panel toggle */}
+                {!isPropertyPanelOpen && selectedComponent && (
+                    <button
+                        className="panel-toggle"
+                        onClick={() => setIsPropertyPanelOpen(true)}
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="18 15 12 9 6 15"></polyline>
+                        </svg>
+                    </button>
                 )}
-            </div>
+            </>
         );
-    };
-
-    // Render component-specific properties
-    const renderComponentProperties = () => {
-        if (!selectedComponent) return null;
-
-        switch(selectedComponent.type) {
-            case 'ec2':
-                return (
-                    <>
-                        <div className="form-group">
-                            <label className="form-label">Instance Type</label>
-                            <select
-                                className="form-select"
-                                value={selectedComponent.instance_type || 't2.micro'}
-                                onChange={(e) => updateComponentProperty(selectedComponent.id, 'instance_type', e.target.value)}
-                            >
-                                <option value="t2.nano">t2.nano (0.5 GiB)</option>
-                                <option value="t2.micro">t2.micro (1 GiB)</option>
-                                <option value="t2.small">t2.small (2 GiB)</option>
-                                <option value="t2.medium">t2.medium (4 GiB)</option>
-                                <option value="t2.large">t2.large (8 GiB)</option>
-                            </select>
-                        </div>
-
-                        <div className="form-group">
-                            <label className="form-label">Instance Count</label>
-                            <div className="number-input-group">
-                                <button
-                                    className="number-input-button number-input-button-left"
-                                    onClick={() => updateComponentProperty(
-                                        selectedComponent.id,
-                                        'instances',
-                                        Math.max(1, (selectedComponent.instances || 1) - 1)
-                                    )}
-                                >
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                        <line x1="5" y1="12" x2="19" y2="12"></line>
-                                    </svg>
-                                </button>
-                                <input
-                                    type="number"
-                                    className="form-input number-input"
-                                    value={selectedComponent.instances || 1}
-                                    onChange={(e) => updateComponentProperty(
-                                        selectedComponent.id,
-                                        'instances',
-                                        Math.max(1, parseInt(e.target.value) || 1)
-                                    )}
-                                    min="1"
-                                    max="20"
-                                />
-                                <button
-                                    className="number-input-button number-input-button-right"
-                                    onClick={() => updateComponentProperty(
-                                        selectedComponent.id,
-                                        'instances',
-                                        Math.min(20, (selectedComponent.instances || 1) + 1)
-                                    )}
-                                >
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                        <line x1="12" y1="5" x2="12" y2="19"></line>
-                                        <line x1="5" y1="12" x2="19" y2="12"></line>
-                                    </svg>
-                                </button>
-                            </div>
-                        </div>
-                    </>
-                );
-
-            case 's3':
-                return (
-                    <div className="form-group">
-                        <label className="form-label">Storage Estimate (GB)</label>
-                        <input
-                            type="number"
-                            className="form-input"
-                            value={selectedComponent.storage || 10}
-                            onChange={(e) => updateComponentProperty(
-                                selectedComponent.id,
-                                'storage',
-                                parseInt(e.target.value) || 10
-                            )}
-                            min="1"
-                        />
-                    </div>
-                );
-
-            case 'ebs':
-                return (
-                    <>
-                        <div className="form-group">
-                            <label className="form-label">Volume Size (GB)</label>
-                            <input
-                                type="number"
-                                className="form-input"
-                                value={selectedComponent.size || 20}
-                                onChange={(e) => updateComponentProperty(
-                                    selectedComponent.id,
-                                    'size',
-                                    parseInt(e.target.value) || 20
-                                )}
-                                min="1"
-                                max="16384"
-                            />
-                        </div>
-
-                        <div className="form-group">
-                            <label className="form-label">Volume Type</label>
-                            <select
-                                className="form-select"
-                                value={selectedComponent.volume_type || 'gp2'}
-                                onChange={(e) => updateComponentProperty(
-                                    selectedComponent.id,
-                                    'volume_type',
-                                    e.target.value
-                                )}
-                            >
-                                <option value="gp2">General Purpose (gp2)</option>
-                                <option value="gp3">General Purpose (gp3)</option>
-                                <option value="io1">Provisioned IOPS (io1)</option>
-                                <option value="st1">Throughput Optimized (st1)</option>
-                                <option value="sc1">Cold Storage (sc1)</option>
-                            </select>
-                        </div>
-
-                        {selectedComponent.volume_type === 'io1' && (
-                            <div className="form-group">
-                                <label className="form-label">IOPS</label>
-                                <input
-                                    type="number"
-                                    className="form-input"
-                                    value={selectedComponent.iops || 100}
-                                    onChange={(e) => updateComponentProperty(
-                                        selectedComponent.id,
-                                        'iops',
-                                        parseInt(e.target.value) || 100
-                                    )}
-                                    min="100"
-                                    max="64000"
-                                />
-                            </div>
-                        )}
-                    </>
-                );
-
-            case 'vpc':
-            case 'subnet':
-                return (
-                    <>
-                        <div className="form-group">
-                            <label className="form-label">CIDR Block</label>
-                            <input
-                                type="text"
-                                className="form-input"
-                                value={selectedComponent.cidr_block || (selectedComponent.type === 'vpc' ? '10.0.0.0/16' : '10.0.1.0/24')}
-                                onChange={(e) => updateComponentProperty(
-                                    selectedComponent.id,
-                                    'cidr_block',
-                                    e.target.value
-                                )}
-                            />
-                        </div>
-
-                        {selectedComponent.type === 'subnet' && (
-                            <>
-                                <div className="form-group">
-                                    <label className="form-label">Availability Zone</label>
-                                    <select
-                                        className="form-select"
-                                        value={selectedComponent.availability_zone || 'us-west-2a'}
-                                        onChange={(e) => updateComponentProperty(
-                                            selectedComponent.id,
-                                            'availability_zone',
-                                            e.target.value
-                                        )}
-                                    >
-                                        <option value="us-west-2a">us-west-2a</option>
-                                        <option value="us-west-2b">us-west-2b</option>
-                                        <option value="us-west-2c">us-west-2c</option>
-                                    </select>
-                                </div>
-
-                                <div className="form-group">
-                                    <label className="form-label">Public Subnet</label>
-                                    <input
-                                        type="checkbox"
-                                        checked={selectedComponent.public !== false}
-                                        onChange={(e) => updateComponentProperty(
-                                            selectedComponent.id,
-                                            'public',
-                                            e.target.checked
-                                        )}
-                                        style={{ marginLeft: '8px' }}
-                                    />
-                                </div>
-                            </>
-                        )}
-                    </>
-                );
-
-            case 'rds':
-                return (
-                    <>
-                        <div className="form-group">
-                            <label className="form-label">Database Engine</label>
-                            <select
-                                className="form-select"
-                                value={selectedComponent.engine || 'mysql'}
-                                onChange={(e) => updateComponentProperty(selectedComponent.id, 'engine', e.target.value)}
-                            >
-                                <option value="mysql">MySQL</option>
-                                <option value="postgres">PostgreSQL</option>
-                                <option value="mariadb">MariaDB</option>
-                                <option value="oracle-se2">Oracle SE2</option>
-                                <option value="sqlserver-ex">SQL Server Express</option>
-                            </select>
-                        </div>
-
-                        <div className="form-group">
-                            <label className="form-label">Instance Class</label>
-                            <select
-                                className="form-select"
-                                value={selectedComponent.instance_class || 'db.t2.micro'}
-                                onChange={(e) => updateComponentProperty(selectedComponent.id, 'instance_class', e.target.value)}
-                            >
-                                <option value="db.t2.micro">db.t2.micro</option>
-                                <option value="db.t2.small">db.t2.small</option>
-                                <option value="db.t2.medium">db.t2.medium</option>
-                                <option value="db.m5.large">db.m5.large</option>
-                            </select>
-                        </div>
-
-                        <div className="form-group">
-                            <label className="form-label">Allocated Storage (GB)</label>
-                            <input
-                                type="number"
-                                className="form-input"
-                                value={selectedComponent.allocated_storage || 20}
-                                onChange={(e) => updateComponentProperty(
-                                    selectedComponent.id,
-                                    'allocated_storage',
-                                    parseInt(e.target.value) || 20
-                                )}
-                                min="20"
-                                max="64000"
-                            />
-                        </div>
-
-                        <div className="form-group">
-                            <label className="form-label">Multi-AZ Deployment</label>
-                            <input
-                                type="checkbox"
-                                checked={selectedComponent.multi_az === true}
-                                onChange={(e) => updateComponentProperty(
-                                    selectedComponent.id,
-                                    'multi_az',
-                                    e.target.checked
-                                )}
-                                style={{ marginLeft: '8px' }}
-                            />
-                        </div>
-                    </>
-                );
-
-            case 'dynamodb':
-                return (
-                    <>
-                        <div className="form-group">
-                            <label className="form-label">Billing Mode</label>
-                            <select
-                                className="form-select"
-                                value={selectedComponent.billing_mode || 'PROVISIONED'}
-                                onChange={(e) => updateComponentProperty(selectedComponent.id, 'billing_mode', e.target.value)}
-                            >
-                                <option value="PROVISIONED">Provisioned Capacity</option>
-                                <option value="PAY_PER_REQUEST">On-Demand (Pay per request)</option>
-                            </select>
-                        </div>
-
-                        {selectedComponent.billing_mode !== 'PAY_PER_REQUEST' && (
-                            <>
-                                <div className="form-group">
-                                    <label className="form-label">Read Capacity Units</label>
-                                    <input
-                                        type="number"
-                                        className="form-input"
-                                        value={selectedComponent.read_capacity || 5}
-                                        onChange={(e) => updateComponentProperty(
-                                            selectedComponent.id,
-                                            'read_capacity',
-                                            parseInt(e.target.value) || 5
-                                        )}
-                                        min="1"
-                                        max="40000"
-                                    />
-                                </div>
-
-                                <div className="form-group">
-                                    <label className="form-label">Write Capacity Units</label>
-                                    <input
-                                        type="number"
-                                        className="form-input"
-                                        value={selectedComponent.write_capacity || 5}
-                                        onChange={(e) => updateComponentProperty(
-                                            selectedComponent.id,
-                                            'write_capacity',
-                                            parseInt(e.target.value) || 5
-                                        )}
-                                        min="1"
-                                        max="40000"
-                                    />
-                                </div>
-                            </>
-                        )}
-                    </>
-                );
-
-            case 'loadBalancer':
-                return (
-                    <>
-                        <div className="form-group">
-                            <label className="form-label">Load Balancer Type</label>
-                            <select
-                                className="form-select"
-                                value={selectedComponent.lb_type || 'application'}
-                                onChange={(e) => updateComponentProperty(selectedComponent.id, 'lb_type', e.target.value)}
-                            >
-                                <option value="application">Application Load Balancer</option>
-                                <option value="network">Network Load Balancer</option>
-                                <option value="classic">Classic Load Balancer</option>
-                            </select>
-                        </div>
-
-                        <div className="form-group">
-                            <label className="form-label">Internal</label>
-                            <input
-                                type="checkbox"
-                                checked={selectedComponent.internal === true}
-                                onChange={(e) => updateComponentProperty(
-                                    selectedComponent.id,
-                                    'internal',
-                                    e.target.checked
-                                )}
-                                style={{ marginLeft: '8px' }}
-                            />
-                        </div>
-                    </>
-                );
-
-            default:
-                return null;
-        }
     };
 
     // Render notifications
@@ -1002,23 +594,23 @@ const CloudArchitectureDesigner = () => {
                         className={`notification notification-${notification.type || 'info'}`}
                     >
                         <div className="notification-content">
-              <span className="notification-icon">
-                <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="20"
-                    height="20"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                >
-                  <circle cx="12" cy="12" r="10"></circle>
-                  <line x1="12" y1="8" x2="12" y2="12"></line>
-                  <line x1="12" y1="16" x2="12.01" y2="16"></line>
-                </svg>
-              </span>
+                            <span className="notification-icon">
+                                <svg
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    width="20"
+                                    height="20"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                >
+                                    <circle cx="12" cy="12" r="10"></circle>
+                                    <line x1="12" y1="8" x2="12" y2="12"></line>
+                                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                                </svg>
+                            </span>
                             <p className="notification-message">{notification.message}</p>
                             <button
                                 className="notification-close"
@@ -1056,10 +648,10 @@ const CloudArchitectureDesigner = () => {
                 <h1 className="app-title">Cloud Architecture Designer</h1>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <span className={`status-indicator ${backendStatus === 'connected' ? 'status-connected' : 'status-disconnected'}`}>
-            <span className={`status-dot ${backendStatus === 'connected' ? 'status-dot-connected' : 'status-dot-disconnected'}`}></span>
-              {backendStatus === 'connected' ? 'Backend Connected' : 'Backend Disconnected'}
-          </span>
+                    <span className={`status-indicator ${backendStatus === 'connected' ? 'status-connected' : 'status-disconnected'}`}>
+                        <span className={`status-dot ${backendStatus === 'connected' ? 'status-dot-connected' : 'status-dot-disconnected'}`}></span>
+                        {backendStatus === 'connected' ? 'Backend Connected' : 'Backend Disconnected'}
+                    </span>
 
                     <button className="btn-primary" onClick={generateTerraformCode}>
                         <FileCode style={{ width: '1rem', height: '1rem' }} />
@@ -1118,18 +710,6 @@ const CloudArchitectureDesigner = () => {
 
                 {/* Right property panel */}
                 {renderPropertyPanel()}
-
-                {/* Collapsed property panel toggle */}
-                {!isPropertyPanelOpen && selectedComponent && (
-                    <button
-                        className="panel-toggle"
-                        onClick={() => setIsPropertyPanelOpen(true)}
-                    >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <polyline points="18 15 12 9 6 15"></polyline>
-                        </svg>
-                    </button>
-                )}
             </div>
 
             {/* Terraform Code Modal */}
