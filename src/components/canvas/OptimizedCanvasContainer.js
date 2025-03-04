@@ -4,6 +4,9 @@ import { Stage, Layer } from 'react-konva';
 import { useDispatch, useSelector } from 'react-redux';
 import { ZoomIn, ZoomOut, Move, X, Layers, Trash2 } from 'lucide-react';
 
+// Import custom hook
+import useConnectionMode from '../../hooks/useConnectionMode';
+
 // Import actions
 import {
     updateComponentPosition,
@@ -45,7 +48,6 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification }) => {
     // Local state
     const [selectedComponentId, setSelectedComponentId] = useState(null);
     const [selectedConnectionId, setSelectedConnectionId] = useState(null);
-    const [ghostLine, setGhostLine] = useState(null);
     const [isDragging, setIsDragging] = useState(false);
     const [draggedOverContainer, setDraggedOverContainer] = useState(null);
 
@@ -58,6 +60,22 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification }) => {
         handleWheel,
         resetView
     } = useCanvasControls();
+
+    // Connection mode hook
+    const {
+        ghostLine,
+        connectionStartComponent,
+        startConnection,
+        updateGhostLine,
+        completeConnection,
+        cancelConnection
+    } = useConnectionMode(
+        stageRef,
+        canvasComponents,
+        connections,
+        dispatch,
+        showNotification
+    );
 
     // Calculate canvas size
     const canvasSize = useMemo(() => ({
@@ -119,30 +137,19 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification }) => {
     const handleComponentClick = useCallback((e, component) => {
         e.cancelBubble = true;
 
-        console.log('Component clicked:', component);
-
+        // Connection mode logic
         if (isLineMode) {
-            if (!lineStart) {
-                // Start a connection
-                dispatch(setLineStart(component));
-                // Create ghost line
-                const sourceX = component.x + (component.width || 40) / 2;
-                const sourceY = component.y + (component.height || 40) / 2;
-                setGhostLine({
-                    points: [sourceX, sourceY, sourceX, sourceY]
-                });
+            if (!connectionStartComponent) {
+                // Start a new connection
+                startConnection(component);
+            } else if (connectionStartComponent.id !== component.id) {
+                // Attempt to complete the connection
+                const connectionSuccessful = completeConnection(component);
 
-                showNotification && showNotification(
-                    `Select a target to connect from ${component.name || component.type}`,
-                    'info'
-                );
-            } else if (lineStart.id !== component.id) {
-                // Complete the connection
-                // Create a new connection in your state management
-
-                // Reset the line drawing state
-                dispatch(setLineStart(null));
-                setGhostLine(null);
+                // Reset line mode if connection was successful or failed
+                if (connectionSuccessful) {
+                    dispatch(setLineMode(false));
+                }
             }
         } else {
             // Normal selection
@@ -154,7 +161,14 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification }) => {
             // Deselect connection
             setSelectedConnectionId(null);
         }
-    }, [dispatch, isLineMode, lineStart, onComponentSelect, showNotification]);
+    }, [
+        isLineMode,
+        connectionStartComponent,
+        startConnection,
+        completeConnection,
+        dispatch,
+        onComponentSelect
+    ]);
 
     // Handle stage click (deselect everything)
     const handleStageClick = useCallback((e) => {
@@ -169,31 +183,18 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification }) => {
             }
 
             // Cancel any ongoing line drawing
-            if (isLineMode && lineStart) {
-                dispatch(setLineStart(null));
-                setGhostLine(null);
+            if (isLineMode) {
+                cancelConnection();
             }
         }
-    }, [dispatch, isLineMode, lineStart, onComponentSelect]);
+    }, [dispatch, isLineMode, connectionStartComponent, onComponentSelect, cancelConnection]);
 
     // Handle mouse move for drawing connections
     const handleMouseMove = useCallback((e) => {
-        if (isLineMode && ghostLine && lineStart) {
-            const stage = e.target.getStage();
-            const point = stage.getPointerPosition();
-            const sourceX = ghostLine.points[0];
-            const sourceY = ghostLine.points[1];
-
-            setGhostLine({
-                points: [
-                    sourceX,
-                    sourceY,
-                    (point.x - stage.x()) / stage.scaleX(),
-                    (point.y - stage.y()) / stage.scaleY()
-                ]
-            });
+        if (isLineMode) {
+            updateGhostLine(e);
         }
-    }, [isLineMode, ghostLine, lineStart]);
+    }, [isLineMode, updateGhostLine]);
 
     // Check if a point is within a container's bounds
     const isPointInContainer = useCallback((x, y, container) => {
@@ -401,37 +402,6 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification }) => {
         }
     }, [dispatch, canvasComponents, canvasSize, showNotification, organizedComponents.containedComponents]);
 
-    // Handle component deletion
-    const handleDeleteComponent = useCallback((componentId) => {
-        const component = canvasComponents.find(c => c.id === componentId);
-        if (!component) return;
-
-        const metadata = getComponentMetadata(component.type);
-
-        // If it's a container, delete all contained components first
-        if (metadata && metadata.isContainer) {
-            const containerComponents = organizedComponents.containedComponents.get(componentId) || [];
-            containerComponents.forEach(component => {
-                dispatch(removeComponent(component.id));
-                dispatch(removeComponentConnections(component.id));
-            });
-
-            showNotification && showNotification(
-                `${containerComponents.length} components inside container were also deleted`,
-                'info'
-            );
-        }
-
-        dispatch(removeComponent(componentId));
-        dispatch(removeComponentConnections(componentId));
-        setSelectedComponentId(null);
-
-        showNotification && showNotification(
-            'Component deleted',
-            'success'
-        );
-    }, [dispatch, showNotification, canvasComponents, organizedComponents.containedComponents]);
-
     // Render connections between components
     const renderConnections = useMemo(() => {
         return connections.map(conn => {
@@ -458,7 +428,7 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification }) => {
         });
     }, [canvasComponents, connections, selectedConnectionId, dispatch, showNotification]);
 
-    // Render a container with its contained components
+// Render a container with its contained components
     const renderContainer = useCallback((container) => {
         const isSelected = selectedComponentId === container.id;
         const isHighlighted = draggedOverContainer === container.id;
@@ -582,7 +552,10 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification }) => {
                     <span>Connection Mode Active</span>
                     <button
                         className="connection-mode-close"
-                        onClick={() => dispatch(setLineMode(false))}
+                        onClick={() => {
+                            dispatch(setLineMode(false));
+                            cancelConnection();
+                        }}
                     >
                         <X size={14} />
                     </button>

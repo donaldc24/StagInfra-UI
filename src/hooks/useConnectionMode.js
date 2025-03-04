@@ -4,30 +4,24 @@ import { setLineMode, setLineStart } from '../store/slices/uiStateSlice';
 import { addConnection } from '../store/slices/connectionsSlice';
 import { validateConnection } from '../services/hierarchicalConnectionValidator';
 
-/**
- * Custom hook to manage the connection mode functionality
- *
- * @param {React.RefObject} stageRef - Reference to the Konva Stage
- * @param {Array} components - List of canvas components
- * @param {Array} connections - List of existing connections
- * @param {Function} dispatch - Redux dispatch function
- * @param {Function} showNotification - Function to show notifications
- * @returns {Object} Connection mode methods and state
- */
-const useConnectionMode = (stageRef, components, connections, dispatch, showNotification) => {
-    // Local state
+const useConnectionMode = (
+    stageRef,
+    components,
+    connections,
+    dispatch,
+    showNotification
+) => {
     const [ghostLine, setGhostLine] = useState(null);
+    const [connectionStartComponent, setConnectionStartComponent] = useState(null);
 
-    /**
-     * Start connection from a source component
-     * @param {Object} sourceComponent - The source component to start from
-     */
-    const handleConnectionStart = useCallback((sourceComponent) => {
+    const startConnection = useCallback((sourceComponent) => {
         if (!sourceComponent) return;
 
+        // Set starting point for connection
+        setConnectionStartComponent(sourceComponent);
         dispatch(setLineStart(sourceComponent));
 
-        // Initialize ghost line at the center of the source component
+        // Create initial ghost line from component center
         const sourceX = sourceComponent.x + (sourceComponent.width || 40) / 2;
         const sourceY = sourceComponent.y + (sourceComponent.height || 40) / 2;
 
@@ -35,144 +29,96 @@ const useConnectionMode = (stageRef, components, connections, dispatch, showNoti
             points: [sourceX, sourceY, sourceX, sourceY]
         });
 
-        // Show which components can connect to this one
-        // This could be enhanced with a visual indication on components
-        showNotification && showNotification(
-            `Select a target to connect from ${sourceComponent.name || sourceComponent.type}`,
+        // Notify user about connection mode
+        showNotification(
+            `Select a target to connect from ${sourceComponent.type}`,
             'info'
         );
     }, [dispatch, showNotification]);
 
-    /**
-     * Update ghost line during mouse movement
-     * @param {Event} e - The mouse move event
-     */
-    const handleConnectionMove = useCallback((e) => {
-        if (!ghostLine) return;
+    const updateGhostLine = useCallback((e) => {
+        if (!ghostLine || !connectionStartComponent) return;
 
         const stage = e.target.getStage();
         const pointerPosition = stage.getPointerPosition();
+
+        // Adjust for stage scaling and position
         const sourceX = ghostLine.points[0];
         const sourceY = ghostLine.points[1];
 
         setGhostLine({
-            points: [sourceX, sourceY, pointerPosition.x, pointerPosition.y]
+            points: [
+                sourceX,
+                sourceY,
+                (pointerPosition.x - stage.x()) / stage.scaleX(),
+                (pointerPosition.y - stage.y()) / stage.scaleY()
+            ]
         });
-    }, [ghostLine]);
+    }, [ghostLine, connectionStartComponent]);
 
-    /**
-     * Complete the connection to a target component
-     * @param {Object} targetComponent - The target component to connect to
-     */
-    const handleConnectionComplete = useCallback((targetComponent) => {
-        // Get the source component from Redux state (lineStart)
-        // This is passed in from the parent component
-        const sourceComponent = components.find(c => c.id === stageRef.current.attrs.lineStartId);
-
-        if (!sourceComponent || !targetComponent) {
-            handleConnectionCancel();
-            return;
+    const completeConnection = useCallback((targetComponent) => {
+        if (!connectionStartComponent || !targetComponent) {
+            cancelConnection();
+            return false;
         }
 
-        // Validate the connection
+        // Validate connection
         const validationResult = validateConnection(
-            sourceComponent,
+            connectionStartComponent,
             targetComponent,
             components,
             connections
         );
 
         if (validationResult.valid) {
-            // Create the connection
-            const newConnection = {
-                id: `${sourceComponent.id}-${targetComponent.id}`,
-                from: sourceComponent.id,
+            // Create connection
+            const connectionId = `${connectionStartComponent.id}-${targetComponent.id}`;
+            dispatch(addConnection({
+                id: connectionId,
+                from: connectionStartComponent.id,
                 to: targetComponent.id
-            };
+            }));
 
-            dispatch(addConnection(newConnection));
-            showNotification && showNotification(
-                `Connected ${sourceComponent.name || sourceComponent.type} to ${targetComponent.name || targetComponent.type}`,
+            // Show success notification with connection type description
+            showNotification(
+                validationResult.message,
                 'success'
             );
+
+            cancelConnection();
+            return true;
         } else {
-            // Show validation error
-            showNotification && showNotification(
+            // Show error notification
+            showNotification(
                 validationResult.message,
                 'error'
             );
-        }
 
-        // Reset connection mode
-        dispatch(setLineStart(null));
-        dispatch(setLineMode(false));
-        setGhostLine(null);
-    }, [dispatch, components, connections, stageRef, showNotification]);
-
-    /**
-     * Cancel the current connection attempt
-     */
-    const handleConnectionCancel = useCallback(() => {
-        dispatch(setLineStart(null));
-        setGhostLine(null);
-
-        showNotification && showNotification(
-            'Connection cancelled',
-            'info'
-        );
-    }, [dispatch, showNotification]);
-
-    /**
-     * Toggle connection mode on/off
-     */
-    const toggleConnectionMode = useCallback(() => {
-        dispatch(setLineMode(prev => {
-            const newState = !prev;
-
-            // Reset if turning off
-            if (!newState) {
-                dispatch(setLineStart(null));
-                setGhostLine(null);
-            }
-
-            showNotification && showNotification(
-                newState ? 'Connection mode activated' : 'Connection mode deactivated',
-                'info'
-            );
-
-            return newState;
-        }));
-    }, [dispatch, showNotification]);
-
-    /**
-     * Check if a target component is valid for connection
-     * @param {Object} sourceComponent - The source component
-     * @param {Object} targetComponent - The potential target component
-     * @returns {boolean} - Whether the connection would be valid
-     */
-    const isValidConnectionTarget = useCallback((sourceComponent, targetComponent) => {
-        if (!sourceComponent || !targetComponent || sourceComponent.id === targetComponent.id) {
             return false;
         }
+    }, [
+        connectionStartComponent,
+        dispatch,
+        components,
+        connections,
+        showNotification
+    ]);
 
-        const validation = validateConnection(
-            sourceComponent,
-            targetComponent,
-            components,
-            connections
-        );
-
-        return validation.valid;
-    }, [components, connections]);
+    const cancelConnection = useCallback(() => {
+        // Reset all connection-related states
+        setConnectionStartComponent(null);
+        setGhostLine(null);
+        dispatch(setLineStart(null));
+        dispatch(setLineMode(false));
+    }, [dispatch]);
 
     return {
         ghostLine,
-        handleConnectionStart,
-        handleConnectionMove,
-        handleConnectionComplete,
-        handleConnectionCancel,
-        toggleConnectionMode,
-        isValidConnectionTarget
+        connectionStartComponent,
+        startConnection,
+        updateGhostLine,
+        completeConnection,
+        cancelConnection
     };
 };
 
