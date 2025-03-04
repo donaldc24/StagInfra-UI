@@ -9,6 +9,9 @@ import './styles/enhanced-ui.css';
 import './styles/modern-ui.css';
 import './styles/HierarchicalComponents.css'; // Add CSS for container components
 
+// Clear initialization flag to ensure proper loading
+localStorage.removeItem('staginfra_initialized');
+
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
     <React.StrictMode>

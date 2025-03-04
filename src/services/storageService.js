@@ -1,4 +1,7 @@
+// 1. First, let's update the storageService.js file to ensure components and connections are saved whenever they change
+
 // src/services/storageService.js
+import { debounce } from 'lodash';
 
 // Key names for localStorage
 const COMPONENTS_KEY = 'staginfra_components';
@@ -82,3 +85,7 @@ export const clearStorage = () => {
         console.error('Error clearing storage:', error);
     }
 };
+
+// Create debounced versions of storage functions to prevent excessive writes
+export const debouncedSaveComponents = debounce(saveComponents, 500);
+export const debouncedSaveConnections = debounce(saveConnections, 500);
