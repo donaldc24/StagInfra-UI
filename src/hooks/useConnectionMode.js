@@ -21,9 +21,31 @@ const useConnectionMode = (
         setConnectionStartComponent(sourceComponent);
         dispatch(setLineStart(sourceComponent));
 
-        // Create initial ghost line from component center
-        const sourceX = sourceComponent.x + (sourceComponent.width || 40) / 2;
-        const sourceY = sourceComponent.y + (sourceComponent.height || 40) / 2;
+        // Calculate absolute position considering containers
+        const getAbsolutePosition = (component) => {
+            let x = component.x;
+            let y = component.y;
+            let currentId = component.containerId;
+
+            // Traverse up the container hierarchy
+            while (currentId) {
+                const container = components.find(c => c.id === currentId);
+                if (container) {
+                    x += container.x;
+                    y += container.y;
+                    currentId = container.containerId;
+                } else {
+                    break;
+                }
+            }
+
+            return { x, y };
+        };
+
+        // Get absolute position
+        const sourcePos = getAbsolutePosition(sourceComponent);
+        const sourceX = sourcePos.x + (sourceComponent.width || 40) / 2;
+        const sourceY = sourcePos.y + (sourceComponent.height || 40) / 2;
 
         setGhostLine({
             points: [sourceX, sourceY, sourceX, sourceY]
@@ -34,7 +56,7 @@ const useConnectionMode = (
             `Select a target to connect from ${sourceComponent.type}`,
             'info'
         );
-    }, [dispatch, showNotification]);
+    }, [dispatch, showNotification, components]);
 
     const updateGhostLine = useCallback((e) => {
         if (!ghostLine || !connectionStartComponent) return;
@@ -42,7 +64,28 @@ const useConnectionMode = (
         const stage = e.target.getStage();
         const pointerPosition = stage.getPointerPosition();
 
-        // Adjust for stage scaling and position
+        // Get absolute position considering containers
+        const getAbsolutePosition = (component) => {
+            let x = component.x;
+            let y = component.y;
+            let currentId = component.containerId;
+
+            // Traverse up the container hierarchy
+            while (currentId) {
+                const container = components.find(c => c.id === currentId);
+                if (container) {
+                    x += container.x;
+                    y += container.y;
+                    currentId = container.containerId;
+                } else {
+                    break;
+                }
+            }
+
+            return { x, y };
+        };
+
+        // We keep the source position from the initial ghostLine
         const sourceX = ghostLine.points[0];
         const sourceY = ghostLine.points[1];
 
@@ -54,13 +97,16 @@ const useConnectionMode = (
                 (pointerPosition.y - stage.y()) / stage.scaleY()
             ]
         });
-    }, [ghostLine, connectionStartComponent]);
+    }, [ghostLine, connectionStartComponent, components]);
 
     const completeConnection = useCallback((targetComponent) => {
         if (!connectionStartComponent || !targetComponent) {
             cancelConnection();
             return false;
         }
+
+        // Use the same components for validation, but ensure we don't create
+        // connections based on absolute positions which would break when containers move
 
         // Validate connection
         const validationResult = validateConnection(

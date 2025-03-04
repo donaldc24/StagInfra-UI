@@ -851,9 +851,22 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification }) => {
 
             if (!source || !target) return null;
 
+            // Force re-render connections when containers move by including relevant data in the dependencies
+            const sourceContainerId = source.containerId;
+            const targetContainerId = target.containerId;
+
+            // Get container positions if they exist
+            const sourceContainer = sourceContainerId ?
+                canvasComponents.find(c => c.id === sourceContainerId) : null;
+            const targetContainer = targetContainerId ?
+                canvasComponents.find(c => c.id === targetContainerId) : null;
+
+            // Include container positions in key to force updates
+            const connectionKey = `${conn.id}-${source.x}-${source.y}-${target.x}-${target.y}-${sourceContainer?.x || 0}-${sourceContainer?.y || 0}-${targetContainer?.x || 0}-${targetContainer?.y || 0}`;
+
             return (
                 <ConnectionLine
-                    key={conn.id}
+                    key={connectionKey}
                     connection={conn}
                     sourceComponent={source}
                     targetComponent={target}

@@ -1,6 +1,7 @@
 // src/components/canvas/ConnectionLine.js
 import React from 'react';
 import { Group, Line, Circle, Text } from 'react-konva';
+import { useSelector } from 'react-redux';
 
 const ConnectionLine = ({
                             connection,
@@ -12,15 +13,43 @@ const ConnectionLine = ({
                             onClick,
                             onDelete
                         }) => {
+    // Get all components to find containers
+    const allComponents = useSelector(state => state.components.list);
+
     // If we have explicit points, use those (for ghost lines)
     let linePoints = points;
 
-    // Otherwise calculate from source and target components
+    // Otherwise calculate from source and target components with container adjustment
     if (!linePoints && sourceComponent && targetComponent) {
-        const sourceX = sourceComponent.x + (sourceComponent.width || 40) / 2;
-        const sourceY = sourceComponent.y + (sourceComponent.height || 40) / 2;
-        const targetX = targetComponent.x + (targetComponent.width || 40) / 2;
-        const targetY = targetComponent.y + (targetComponent.height || 40) / 2;
+        // Helper to get absolute position considering container nesting
+        const getAbsolutePosition = (component) => {
+            let x = component.x;
+            let y = component.y;
+            let currentId = component.containerId;
+
+            // Traverse up the container hierarchy
+            while (currentId) {
+                const container = allComponents.find(c => c.id === currentId);
+                if (container) {
+                    x += container.x;
+                    y += container.y;
+                    currentId = container.containerId;
+                } else {
+                    break;
+                }
+            }
+
+            return { x, y };
+        };
+
+        // Get absolute positions
+        const sourcePos = getAbsolutePosition(sourceComponent);
+        const targetPos = getAbsolutePosition(targetComponent);
+
+        const sourceX = sourcePos.x + (sourceComponent.width || 40) / 2;
+        const sourceY = sourcePos.y + (sourceComponent.height || 40) / 2;
+        const targetX = targetPos.x + (targetComponent.width || 40) / 2;
+        const targetY = targetPos.y + (targetComponent.height || 40) / 2;
 
         linePoints = [sourceX, sourceY, targetX, targetY];
     }
