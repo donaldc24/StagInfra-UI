@@ -94,8 +94,10 @@ const componentsSlice = createSlice({
                 component.x = position.x;
                 component.y = position.y;
 
-                // Update container relationship if provided
+                // Only update containerId if it was explicitly provided
                 if (containerId !== undefined) {
+                    // If containerId is null, remove the containment relationship
+                    // If containerId has a value, establish the containment relationship
                     component.containerId = containerId;
                     console.log(`Component ${id} container updated to:`, containerId);
                 }

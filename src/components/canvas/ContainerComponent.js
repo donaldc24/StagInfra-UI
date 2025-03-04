@@ -53,7 +53,6 @@ const ContainerComponent = ({
     };
 
     const handleDragStart = (e) => {
-        console.log('Container drag start:', id);
         // Add visual feedback for dragging
         e.target.setAttrs({
             shadowOffset: {
@@ -64,23 +63,20 @@ const ContainerComponent = ({
             shadowOpacity: 0.2
         });
 
-        // CRITICAL FIX: Call the parent handler
+        // Call the parent handler
         if (onDragStart) {
             onDragStart(e, id);
         }
     };
 
     const handleDragMove = (e) => {
-        console.log('Container drag move:', id);
-
-        // CRITICAL FIX: Call the parent handler
+        // Call the parent handler
         if (onDragMove) {
             onDragMove(e, id);
         }
     };
 
     const handleDragEnd = (e) => {
-        console.log('Container drag end:', id);
         // Reset appearance
         e.target.to({
             duration: 0.1,
@@ -92,7 +88,7 @@ const ContainerComponent = ({
             shadowOpacity: 0
         });
 
-        // CRITICAL FIX: Call the parent handler
+        // Call the parent handler
         if (onDragEnd) {
             onDragEnd(e, id);
         }

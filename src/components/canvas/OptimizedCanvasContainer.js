@@ -194,9 +194,24 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification }) => {
             return metadata && metadata.isContainer;
         });
 
+        // Sort containers so parent containers (VPCs) come before child containers (Subnets)
+        const sortedContainers = [...containers].sort((a, b) => {
+            // If b is contained by a, a should come first
+            if (b.containerId === a.id) return -1;
+            // If a is contained by b, b should come first
+            if (a.containerId === b.id) return 1;
+
+            // VPCs should come before subnets
+            if (a.type === 'vpc' && b.type === 'subnet') return -1;
+            if (a.type === 'subnet' && b.type === 'vpc') return 1;
+
+            // Otherwise maintain existing order
+            return 0;
+        });
+
         // Map to hold contained components
         const containedComponents = new Map();
-        containers.forEach(container => {
+        sortedContainers.forEach(container => {
             containedComponents.set(container.id, []);
         });
 
@@ -211,18 +226,19 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification }) => {
         });
 
         // Get standalone components (not in any container)
-        const standaloneComponents = canvasComponents.filter(comp =>
-            !comp.containerId && !getComponentMetadata(comp.type)?.isContainer
-        );
+        const standaloneComponents = canvasComponents.filter(comp => {
+            // A component is standalone if it's not a container and not contained by anything
+            const isContainer = getComponentMetadata(comp.type)?.isContainer;
+            return !comp.containerId && !isContainer;
+        });
 
         return {
-            containers,
+            containers: sortedContainers,
             containedComponents,
             standaloneComponents
         };
     }, [canvasComponents]);
-
-    // 1. isPointInContainer function
+    
     const isPointInContainer = useCallback((x, y, container) => {
         // Add debugging log
         if (isDebugEnabled) {
@@ -247,21 +263,47 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification }) => {
         return result;
     }, [isDebugEnabled]);
 
-    // 2. findContainerAt function
     const findContainerAt = useCallback((x, y, componentType) => {
         if (isDebugEnabled) {
             console.log(`Finding container at (${x}, ${y}) for component type: ${componentType}`);
         }
 
+        // Get component metadata to check containment rules
+        const draggedComponentMetadata = getComponentMetadata(componentType);
+
+        // Check which container types can contain this component
+        const allowedContainerTypes = [];
+
+        // Add explicit containment rules
+        if (draggedComponentMetadata && draggedComponentMetadata.mustBeContainedBy) {
+            allowedContainerTypes.push(...draggedComponentMetadata.mustBeContainedBy);
+        }
+
+        if (draggedComponentMetadata && draggedComponentMetadata.canBeContainedBy) {
+            allowedContainerTypes.push(...draggedComponentMetadata.canBeContainedBy);
+        }
+
+        if (isDebugEnabled) {
+            console.log(`Component ${componentType} can be contained by:`, allowedContainerTypes);
+        }
+
+        // If component can't be contained, exit early
+        if (allowedContainerTypes.length === 0) {
+            return null;
+        }
+
         // Get all containers that could potentially contain this component type
         const potentialContainers = organizedComponents.containers.filter(container => {
-            // Get container metadata
-            const metadata = getComponentMetadata(container.type);
+            // First check if container type is in the allowed list
+            if (!allowedContainerTypes.includes(container.type)) {
+                return false;
+            }
 
-            // Check if this container can contain the component type
-            return metadata &&
-                metadata.canContain &&
-                metadata.canContain.includes(componentType);
+            // Then check if container metadata confirms it can contain this type
+            const containerMetadata = getComponentMetadata(container.type);
+            return containerMetadata &&
+                containerMetadata.canContain &&
+                containerMetadata.canContain.includes(componentType);
         });
 
         if (isDebugEnabled) {
@@ -284,7 +326,7 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification }) => {
             console.log('No container found for this component type');
         }
         return null;
-    }, [isPointInContainer, organizedComponents.containers, isDebugEnabled, getComponentMetadata]);
+    }, [isPointInContainer, organizedComponents.containers, isDebugEnabled]);
 
     // Handle component click
     const handleComponentClick = useCallback((e, component) => {
@@ -440,9 +482,8 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification }) => {
         } else {
             console.log(`Container ${container.type} cannot be contained by any other container`);
         }
-    }, [isDragging, canvasComponents, findContainerAt, getComponentMetadata, logDragEvent]);
+    }, [isDragging, canvasComponents, findContainerAt, logDragEvent]);
 
-    // 6. handleDragEnd function
     const handleDragEnd = useCallback((e, componentId) => {
         setIsDragging(false);
         const component = canvasComponents.find(c => c.id === componentId);
@@ -481,54 +522,45 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification }) => {
         }
 
         // Container handling
-        const containerData = {};
+        let updatedContainerId = component.containerId;
 
         // Check component metadata to see if it can be contained
         const metadata = getComponentMetadata(component.type);
         const canBeContained = !metadata ||
-            (metadata.mustBeContainedBy && metadata.mustBeContainedBy.length > 0);
+            (metadata.mustBeContainedBy && metadata.mustBeContainedBy.length > 0) ||
+            (metadata.canBeContainedBy && metadata.canBeContainedBy.length > 0);
 
         if (canBeContained) {
             const container = findContainerAt(newX, newY, component.type);
 
             if (container) {
-                containerData.containerId = container.id;
+                updatedContainerId = container.id;
                 console.log(`Component ${componentId} dropped in container ${container.id} (${container.type})`);
 
                 showNotification(
                     `Placed ${component.type.toUpperCase()} in ${container.type.toUpperCase()}`,
                     'success'
                 );
-            } else if (component.containerId) {
-                // Component was removed from a container
-                containerData.containerId = null;
-                console.log(`Component ${componentId} removed from container ${component.containerId}`);
+            } else {
+                // If component was previously in a container but is now outside any container
+                if (component.containerId) {
+                    updatedContainerId = null;
+                    console.log(`Component ${componentId} removed from container ${component.containerId}`);
+                }
             }
         }
 
         // Reset highlighted containers
         setDraggedOverContainer(null);
 
-        // Update position and container
+        // Update component position and containment in a single dispatch
         dispatch(updateComponentPosition({
             id: componentId,
             position: { x: newX, y: newY },
-            ...containerData
+            containerId: updatedContainerId
         }));
-    }, [
-        dispatch,
-        canvasComponents,
-        canvasSize,
-        showNotification,
-        findContainerAt,
-        removeComponent,
-        removeComponentConnections,
-        updateComponentPosition,
-        getComponentMetadata,
-        logDragEvent
-    ]);
+    }, [dispatch, canvasComponents, canvasSize, showNotification, findContainerAt, logDragEvent]);
 
-    // 7. handleContainerDragEnd function
     const handleContainerDragEnd = useCallback((e, containerId) => {
         setIsDragging(false);
         const container = canvasComponents.find(c => c.id === containerId);
@@ -555,11 +587,30 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification }) => {
         );
 
         if (inTrashArea) {
-            // Delete the container and all its components
-            const containerComponents = organizedComponents.containedComponents.get(containerId) || [];
+            // Find all components contained by this container (including nested ones)
+            const getAllContainedComponents = (containerId) => {
+                const directComponents = organizedComponents.containedComponents.get(containerId) || [];
+                let allComponents = [...directComponents];
+
+                // Find nested containers and their components
+                const nestedContainers = directComponents.filter(comp => {
+                    const metadata = getComponentMetadata(comp.type);
+                    return metadata && metadata.isContainer;
+                });
+
+                // Recursively get components from nested containers
+                nestedContainers.forEach(nestedContainer => {
+                    allComponents = [...allComponents, ...getAllContainedComponents(nestedContainer.id)];
+                });
+
+                return allComponents;
+            };
+
+            // Get all components nested at any level
+            const allContainedComponents = getAllContainedComponents(containerId);
 
             // Delete all contained components first
-            containerComponents.forEach(component => {
+            allContainedComponents.forEach(component => {
                 dispatch(removeComponent(component.id));
                 dispatch(removeComponentConnections(component.id));
             });
@@ -573,20 +624,37 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification }) => {
             return;
         }
 
-        // Check if this container can be contained by another container
-        const metadata = getComponentMetadata(container.type);
-        const canBeContained = metadata &&
-            metadata.mustBeContainedBy &&
-            metadata.mustBeContainedBy.length > 0;
-
         // Container relationship handling
-        const containerData = {};
+        let updatedContainerId = container.containerId;
+        const metadata = getComponentMetadata(container.type);
+
+        // Check if this container can be contained by another container
+        const canBeContained = metadata &&
+            ((metadata.mustBeContainedBy && metadata.mustBeContainedBy.length > 0) ||
+                (metadata.canBeContainedBy && metadata.canBeContainedBy.length > 0));
+
+        // Prevent containers from containing themselves or their parents
+        const isValidContainer = (parentContainer) => {
+            if (!parentContainer) return true;
+
+            // Can't contain itself
+            if (parentContainer.id === containerId) return false;
+
+            // Check if this is an ancestor
+            let current = parentContainer;
+            while (current) {
+                if (current.containerId === containerId) return false;
+                current = canvasComponents.find(c => c.id === current.containerId);
+            }
+
+            return true;
+        };
 
         if (canBeContained) {
             const parentContainer = findContainerAt(newX, newY, container.type);
 
-            if (parentContainer) {
-                containerData.containerId = parentContainer.id;
+            if (parentContainer && isValidContainer(parentContainer)) {
+                updatedContainerId = parentContainer.id;
                 console.log(`Container ${containerId} placed in parent container ${parentContainer.id} (${parentContainer.type})`);
 
                 showNotification(
@@ -595,7 +663,7 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification }) => {
                 );
             } else if (container.containerId) {
                 // Container was removed from its parent
-                containerData.containerId = null;
+                updatedContainerId = null;
                 console.log(`Container ${containerId} removed from parent container ${container.containerId}`);
             }
         }
@@ -604,35 +672,34 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification }) => {
         dispatch(updateComponentPosition({
             id: containerId,
             position: { x: newX, y: newY },
-            ...containerData
+            containerId: updatedContainerId
         }));
 
+        // Function to update all components inside a container
+        const updateAllContainedComponents = (containerId, dx, dy) => {
+            const directComponents = organizedComponents.containedComponents.get(containerId) || [];
+
+            // Update direct components
+            directComponents.forEach(component => {
+                dispatch(updateComponentPosition({
+                    id: component.id,
+                    position: { x: component.x + dx, y: component.y + dy }
+                }));
+
+                // Recursively update nested containers
+                const componentMetadata = getComponentMetadata(component.type);
+                if (componentMetadata && componentMetadata.isContainer) {
+                    updateAllContainedComponents(component.id, dx, dy);
+                }
+            });
+        };
+
         // Then update all contained components to move with the container
-        const containerComponents = organizedComponents.containedComponents.get(containerId) || [];
-        containerComponents.forEach(component => {
-            dispatch(updateComponentPosition({
-                id: component.id,
-                position: { x: component.x + dx, y: component.y + dy }
-            }));
-        });
+        updateAllContainedComponents(containerId, dx, dy);
 
         // Reset highlighted containers
         setDraggedOverContainer(null);
-    }, [
-        canvasComponents,
-        canvasSize,
-        dispatch,
-        organizedComponents.containedComponents,
-        removeComponent,
-        removeComponentConnections,
-        setDraggedOverContainer,
-        setSelectedComponentId,
-        showNotification,
-        updateComponentPosition,
-        findContainerAt,
-        getComponentMetadata,
-        logDragEvent
-    ]);
+    }, [canvasComponents, canvasSize, dispatch, organizedComponents.containedComponents, setDraggedOverContainer, setSelectedComponentId, showNotification, findContainerAt, logDragEvent]);
 
     // Render connections between components
     const renderConnections = useMemo(() => {
@@ -660,13 +727,23 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification }) => {
         });
     }, [canvasComponents, connections, selectedConnectionId, dispatch, showNotification]);
 
-    // 8. Modified renderContainer function
     const renderContainer = useCallback((container) => {
         const isSelected = selectedComponentId === container.id;
         const isHighlighted = draggedOverContainer === container.id;
 
-        // Get contained components
+        // Get directly contained components for this container
         const containedComponents = organizedComponents.containedComponents.get(container.id) || [];
+
+        // Split contained components into nested containers and regular components
+        const nestedContainers = containedComponents.filter(comp => {
+            const metadata = getComponentMetadata(comp.type);
+            return metadata && metadata.isContainer;
+        });
+
+        const regularComponents = containedComponents.filter(comp => {
+            const metadata = getComponentMetadata(comp.type);
+            return !metadata || !metadata.isContainer;
+        });
 
         return (
             <ContainerComponent
@@ -679,8 +756,11 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification }) => {
                 onDragMove={(e) => handleContainerDragMove(e, container.id)}
                 onDragEnd={(e) => handleContainerDragEnd(e, container.id)}
             >
-                {/* Render contained components */}
-                {containedComponents.map(component => (
+                {/* First render nested containers */}
+                {nestedContainers.map(nestedContainer => renderContainer(nestedContainer))}
+
+                {/* Then render regular components */}
+                {regularComponents.map(component => (
                     <AwsComponent
                         key={component.id}
                         component={component}
@@ -694,18 +774,7 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification }) => {
                 ))}
             </ContainerComponent>
         );
-    }, [
-        selectedComponentId,
-        draggedOverContainer,
-        organizedComponents.containedComponents,
-        handleComponentClick,
-        handleDragStart,
-        handleContainerDragMove,
-        handleContainerDragEnd,
-        handleDragMove,
-        handleDragEnd,
-        isLineMode
-    ]);
+    }, [selectedComponentId, draggedOverContainer, organizedComponents.containedComponents, handleComponentClick, handleDragStart, handleContainerDragMove, handleContainerDragEnd, handleDragMove, handleDragEnd, isLineMode]);
 
     // 9. Debug helper component
     const ContainerDebugger = () => {
@@ -802,12 +871,12 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification }) => {
                         scale={scale}
                     />
 
-                    {/* Render containers first (bottom layer) */}
-                    {organizedComponents.containers.map(container =>
-                        renderContainer(container)
-                    )}
+                    {/* First render standalone containers (VPCs without a parent) */}
+                    {organizedComponents.containers
+                        .filter(container => !container.containerId)
+                        .map(container => renderContainer(container))}
 
-                    {/* Render standalone components (top layer) */}
+                    {/* Then render standalone components (not in any container) */}
                     {organizedComponents.standaloneComponents.map(component => (
                         <AwsComponent
                             key={component.id}

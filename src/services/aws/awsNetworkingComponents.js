@@ -72,6 +72,7 @@ resource "aws_vpc" "${sanitizeResourceName(component.name || `vpc-${component.id
         isContainer: true,
         canContain: ['ec2', 'rds', 'elasticache', 'lambda'],
         mustBeContainedBy: ['vpc'], // EXPLICIT containment requirement
+        canBeContainedBy: ['vpc'], // Add this for clarity
         size: { width: 200, height: 150 },
         terraformTemplate: (component, parentVpc) => `
 resource "aws_subnet" "${sanitizeResourceName(component.name || `subnet-${component.id.slice(-4)}`)}" {
