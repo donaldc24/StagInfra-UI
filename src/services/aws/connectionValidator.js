@@ -1,5 +1,5 @@
-// src/services/hierarchicalConnectionValidator.js
-import { getComponentMetadata } from './hierarchicalAwsComponentRegistry';
+// src/services/aws/connectionValidator.js
+import { getComponentMetadata } from './awsComponentRegistry';
 
 /**
  * Validates whether a connection can be created between two components
@@ -95,27 +95,12 @@ export const validateConnection = (
         }
     }
 
-    // Generate a descriptive connection message
-    const connectionDescriptions = {
-        'ec2-s3': 'EC2 accessing S3 storage',
-        'ec2-rds': 'EC2 connecting to RDS database',
-        'lambda-s3': 'Lambda triggered by S3 events',
-        'lambda-dynamodb': 'Lambda reading/writing to DynamoDB',
-        'vpc-subnet': 'VPC containing subnet',
-        'subnet-ec2': 'Subnet hosting EC2 instance',
-        'subnet-rds': 'Subnet hosting RDS database',
-        'securityGroup-ec2': 'Security Group protecting EC2',
-        'loadBalancer-ec2': 'Load Balancer routing to EC2'
-    };
-
-    const connectionKey = `${sourceComponent.type}-${targetComponent.type}`;
-    const connectionDescription = connectionDescriptions[connectionKey] ||
-        connectionDescriptions[`${targetComponent.type}-${sourceComponent.type}`] ||
-        'Component Connection';
+    // Get a descriptive message for the connection
+    const description = getConnectionDescription(sourceComponent.type, targetComponent.type);
 
     return {
         valid: true,
-        message: connectionDescription
+        message: description
     };
 };
 
@@ -142,4 +127,9 @@ export const getConnectionDescription = (sourceType, targetType) => {
     return connectionDescriptions[connectionKey] ||
         connectionDescriptions[`${targetType}-${sourceType}`] ||
         'Component Connection';
+};
+
+export default {
+    validateConnection,
+    getConnectionDescription
 };

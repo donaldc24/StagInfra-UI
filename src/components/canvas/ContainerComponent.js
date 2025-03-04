@@ -1,7 +1,7 @@
 // src/components/canvas/ContainerComponent.js
 import React, { useState } from 'react';
 import { Group, Rect, Text } from 'react-konva';
-import { getComponentMetadata } from '../../services/hierarchicalAwsComponentRegistry';
+import { getComponentMetadata } from '../../services/aws';
 
 const ContainerComponent = ({
                                 component,

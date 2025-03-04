@@ -1,6 +1,6 @@
 // src/store/slices/componentsSlice.js
 import { createSlice } from '@reduxjs/toolkit';
-import { getComponentMetadata } from '../../services/hierarchicalAwsComponentRegistry';
+import { getComponentMetadata } from '../../services/aws';
 
 const componentsSlice = createSlice({
     name: 'components',

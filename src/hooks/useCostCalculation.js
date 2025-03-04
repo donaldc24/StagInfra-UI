@@ -2,7 +2,7 @@
 import { useEffect, useCallback } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { debounce } from 'lodash';
-import { calculateCost, estimateCostLocally } from '../services/costCalculationService';
+import { calculateCost, estimateCostLocally } from '../services/utils/costCalculationService';
 import { updateCost } from '../store/slices/costSlice';
 
 /**

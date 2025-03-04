@@ -2,7 +2,7 @@
 import { useState, useCallback } from 'react';
 import { setLineMode, setLineStart } from '../store/slices/uiStateSlice';
 import { addConnection } from '../store/slices/connectionsSlice';
-import { validateConnection } from '../services/hierarchicalConnectionValidator';
+import { validateConnection } from '../services/aws/connectionValidator';
 
 const useConnectionMode = (
     stageRef,

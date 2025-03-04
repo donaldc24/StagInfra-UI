@@ -35,7 +35,7 @@ import CanvasGrid from './CanvasGrid';
 import useCanvasControls from '../../hooks/useCanvasControls';
 
 // Import utilities
-import { getComponentMetadata } from '../../services/hierarchicalAwsComponentRegistry';
+import { getComponentMetadata } from '../../services/aws';
 
 const OptimizedCanvasContainer = ({ onComponentSelect, showNotification }) => {
     const dispatch = useDispatch();

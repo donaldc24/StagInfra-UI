@@ -1,4 +1,4 @@
-// src/components/CloudArchitectureDesigner.js
+// src/components/CloudArchitectureDesigner.js - Updated imports
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { FileCode } from 'lucide-react';
@@ -19,9 +19,12 @@ import { removeComponentConnections, clearConnections } from '../store/slices/co
 import useNotification from '../hooks/useNotification';
 import useCostCalculation from '../hooks/useCostCalculation';
 
-// Import utilities
-import { getComponentMetadata, getDefaultProperties } from '../services/hierarchicalAwsComponentRegistry';
-import { generateTerraform } from '../services/hierarchicalTerraformGenerator';
+// Import utilities - Updated imports to use new structure
+import {
+    getComponentMetadata,
+    getDefaultProperties
+} from '../services/aws';
+import { generateTerraform } from '../services/terraform';
 
 // Debug overlay component
 const DebugOverlay = ({ enabled }) => {

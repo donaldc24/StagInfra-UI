@@ -5,7 +5,7 @@ import CloudArchitectureDesigner from './components/CloudArchitectureDesigner';
 import { setBackendStatus } from './store/slices/systemSlice';
 import { loadComponents } from './store/slices/componentsSlice';
 import { loadConnections } from './store/slices/connectionsSlice';
-import { getComponents, getConnections } from './services/storageService';
+import { getComponents, getConnections } from './services/utils/storageService';
 import './styles/layout.css';
 import './styles/utilities.css';
 

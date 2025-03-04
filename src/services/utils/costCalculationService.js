@@ -1,5 +1,5 @@
 // src/services/costCalculationService.js
-import { updateCost, setCostLoading, setCostError } from '../store/slices/costSlice';
+import { updateCost, setCostLoading, setCostError } from '../../store/slices/costSlice';
 
 /**
  * Calls the backend API to calculate infrastructure costs

@@ -1,7 +1,6 @@
 // src/components/canvas/AwsComponent.js
 import React from 'react';
 import { Group, Rect, Text } from 'react-konva';
-import { getComponentMetadata } from '../../services/hierarchicalAwsComponentRegistry';
 
 const AwsComponent = ({
                           component,
