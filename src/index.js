@@ -4,10 +4,8 @@ import ReactDOM from 'react-dom/client';
 import { Provider } from 'react-redux';
 import { store } from './store';
 import App from './App';
-import './styles/index.css';
-import './styles/enhanced-ui.css';
-import './styles/modern-ui.css';
-import './styles/HierarchicalComponents.css'; // Add CSS for container components
+import './styles/utilities.css';
+import './styles/components.css'; // Add CSS for container components
 
 // Clear initialization flag to ensure proper loading
 localStorage.removeItem('staginfra_initialized');

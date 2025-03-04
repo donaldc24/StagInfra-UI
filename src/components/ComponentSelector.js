@@ -1,7 +1,7 @@
 // src/components/ComponentSelector.js
 import React from 'react';
 import { getComponentCategories, awsComponentRegistry } from '../services/awsComponentRegistry';
-import '../styles/ComponentSelector.css';
+import '../styles/components.css';
 
 const ComponentSelector = ({ onSelectComponent }) => {
     const categories = getComponentCategories();

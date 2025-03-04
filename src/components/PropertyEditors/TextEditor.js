@@ -1,5 +1,5 @@
 import React from 'react';
-import '../styles/PropertyEditors.css';
+import '../styles/components.css';
 
 const TextEditor = ({ definition, value, onChange }) => {
     const { key, label, placeholder } = definition;

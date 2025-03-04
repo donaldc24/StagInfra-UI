@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import '../styles/Modal.css';
+import '../styles/components.css';
 
 const RenameModal = ({ component, onSave, onCancel }) => {
     const [customName, setCustomName] = useState('');

@@ -1,5 +1,5 @@
 import React from 'react';
-import '../styles/CostSummary.css';
+import '../styles/components.css';
 
 function CostSummary({ totalCost }) {
     return (

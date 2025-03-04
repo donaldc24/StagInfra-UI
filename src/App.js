@@ -6,8 +6,8 @@ import { setBackendStatus } from './store/slices/systemSlice';
 import { loadComponents } from './store/slices/componentsSlice';
 import { loadConnections } from './store/slices/connectionsSlice';
 import { getComponents, getConnections } from './services/storageService';
-import './styles/App.css';
-import './styles/enhanced-ui.css';
+import './styles/layout.css';
+import './styles/utilities.css';
 
 function App() {
     const dispatch = useDispatch();

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useSelector } from 'react-redux';
 import { generateTerraform } from '../services/terraformGeneration';
 import { selectComponents } from '../store/slices/componentsSlice';
-import '../styles/GenerateTerraform.css';
+import '../styles/layout.css';
 
 const GenerateTerraform = () => {
     const [showModal, setShowModal] = useState(false);
