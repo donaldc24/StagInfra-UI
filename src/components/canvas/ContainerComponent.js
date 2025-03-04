@@ -7,28 +7,29 @@ const ContainerComponent = ({
                                 component,
                                 children,
                                 isSelected,
+                                isHighlighted,
                                 onClick,
                                 onDragMove,
                                 onDragEnd
                             }) => {
-    const { id, type, x, y, width = 200, height = 150, name } = component;
+    const { id, type, x, y, width = 300, height = 200, name } = component;
     const [isCollapsed, setIsCollapsed] = useState(false);
     const metadata = getComponentMetadata(type) || {};
 
     // Styling based on container type
     const style = {
         vpc: {
-            fill: 'rgba(124, 58, 237, 0.05)',
+            fill: 'rgba(124, 58, 237, 0.1)',
             headerFill: '#7C3AED',
             dash: []
         },
         subnet: {
-            fill: 'rgba(99, 102, 241, 0.05)',
+            fill: 'rgba(99, 102, 241, 0.1)',
             headerFill: '#6366F1',
             dash: [10, 5]
         }
     }[type] || {
-        fill: 'rgba(107, 114, 128, 0.05)',
+        fill: 'rgba(107, 114, 128, 0.1)',
         headerFill: '#6B7280',
         dash: []
     };
@@ -39,6 +40,9 @@ const ContainerComponent = ({
 
     if (isSelected) {
         strokeColor = '#3B82F6';
+        strokeWidth = 2;
+    } else if (isHighlighted) {
+        strokeColor = '#10B981';
         strokeWidth = 2;
     }
 
@@ -85,13 +89,25 @@ const ContainerComponent = ({
         }
     };
 
+    // Generate a label with component type info and count of contained items
+    const containerLabel = () => {
+        const childCount = React.Children.count(children);
+        const typeName = metadata.displayName || type.toUpperCase();
+        const nameLabel = name || `${typeName}-${id.slice(-4)}`;
+
+        return nameLabel + (childCount > 0 ? ` (${childCount})` : '');
+    };
+
+    // Special styling for CIDR block display
+    const cidrLabel = component.cidr_block ? `CIDR: ${component.cidr_block}` : '';
+
     return (
         <Group
             x={x}
             y={y}
             width={width}
             height={isCollapsed ? 30 : height}
-            draggable={true}
+            draggable
             onClick={(e) => onClick && onClick(e, component)}
             onDragStart={handleDragStart}
             onDragMove={handleDragMove}
@@ -129,10 +145,12 @@ const ContainerComponent = ({
             <Text
                 x={10}
                 y={7}
-                text={name || metadata.displayName || type}
+                text={containerLabel()}
                 fontSize={14}
                 fontStyle="bold"
                 fill="white"
+                width={width - 40}
+                ellipsis
             />
 
             {/* Collapse/expand button */}
@@ -157,8 +175,31 @@ const ContainerComponent = ({
                 />
             </Group>
 
+            {/* CIDR block display */}
+            {!isCollapsed && cidrLabel && (
+                <Text
+                    x={10}
+                    y={35}
+                    text={cidrLabel}
+                    fontSize={12}
+                    fill="#4B5563"
+                />
+            )}
+
             {/* Only render children if not collapsed */}
             {!isCollapsed && children}
+
+            {/* Show placeholder when no components are in container */}
+            {!isCollapsed && React.Children.count(children) === 0 && (
+                <Text
+                    x={width / 2 - 60}
+                    y={height / 2 - 10}
+                    text="Drop components here"
+                    fontSize={12}
+                    fill="#9CA3AF"
+                    fontStyle="italic"
+                />
+            )}
 
             {/* Show count when collapsed */}
             {isCollapsed && React.Children.count(children) > 0 && (

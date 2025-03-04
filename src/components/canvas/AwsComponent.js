@@ -1,15 +1,18 @@
 // src/components/canvas/AwsComponent.js
 import React from 'react';
 import { Group, Rect, Text } from 'react-konva';
+import { getComponentMetadata } from '../../services/hierarchicalAwsComponentRegistry';
 
 const AwsComponent = ({
                           component,
                           isSelected,
                           isConnectable,
                           onClick,
+                          onDragStart,
+                          onDragMove,
                           onDragEnd
                       }) => {
-    const { id, type, x, y, width = 40, height = 40, name } = component;
+    const { id, type, x, y, width = 40, height = 40, name, containerId } = component;
 
     // Different colors based on component type
     const getColor = () => {
@@ -44,6 +47,17 @@ const AwsComponent = ({
             scaleX: 1.02,
             scaleY: 1.02
         });
+
+        if (onDragStart) {
+            onDragStart(e, id);
+        }
+    };
+
+    // Handle drag move
+    const handleDragMove = (e) => {
+        if (onDragMove) {
+            onDragMove(e, id);
+        }
     };
 
     // Handle drag end
@@ -61,6 +75,20 @@ const AwsComponent = ({
         }
     };
 
+    // Add special styling if component is in a container
+    const containerIndicator = containerId ? (
+        <Rect
+            x={width - 6}
+            y={-6}
+            width={12}
+            height={12}
+            cornerRadius={6}
+            fill="#4285F4"
+            stroke="white"
+            strokeWidth={1}
+        />
+    ) : null;
+
     return (
         <Group
             x={x}
@@ -70,6 +98,7 @@ const AwsComponent = ({
             draggable
             onClick={(e) => onClick && onClick(e, component)}
             onDragStart={handleDragStart}
+            onDragMove={handleDragMove}
             onDragEnd={handleDragEnd}
         >
             {/* Main component shape */}
@@ -95,6 +124,9 @@ const AwsComponent = ({
                 align="center"
                 verticalAlign="middle"
             />
+
+            {/* Container indicator (if in a container) */}
+            {containerIndicator}
 
             {/* Component name below */}
             <Text

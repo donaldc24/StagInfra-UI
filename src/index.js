@@ -6,7 +6,8 @@ import { store } from './store';
 import App from './App';
 import './styles/index.css';
 import './styles/enhanced-ui.css';
-import './styles/modern-ui.css';  // Add this line
+import './styles/modern-ui.css';
+import './styles/HierarchicalComponents.css'; // Add CSS for container components
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(

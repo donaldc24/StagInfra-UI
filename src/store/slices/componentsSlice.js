@@ -1,5 +1,6 @@
 // src/store/slices/componentsSlice.js
 import { createSlice } from '@reduxjs/toolkit';
+import { getComponentMetadata } from '../../services/hierarchicalAwsComponentRegistry';
 
 const componentsSlice = createSlice({
     name: 'components',
@@ -19,6 +20,16 @@ const componentsSlice = createSlice({
         addComponent: (state, action) => {
             // Only add valid components
             if (action.payload && action.payload.id && action.payload.type) {
+                // Set default dimensions based on component type
+                const metadata = getComponentMetadata(action.payload.type);
+                if (metadata) {
+                    // Apply container-specific defaults if it's a container
+                    if (metadata.isContainer) {
+                        action.payload.width = action.payload.width || metadata.size?.width || 300;
+                        action.payload.height = action.payload.height || metadata.size?.height || 200;
+                    }
+                }
+
                 state.list.push(action.payload);
                 console.log('Component added:', action.payload.id);
             }
@@ -40,11 +51,20 @@ const componentsSlice = createSlice({
             }
         },
         removeComponent: (state, action) => {
+            // Remove the component
             state.list = state.list.filter(comp => comp.id !== action.payload);
+
+            // Also clear container references if this was a container
+            state.list.forEach(comp => {
+                if (comp.containerId === action.payload) {
+                    comp.containerId = null;
+                }
+            });
+
             console.log('Component removed:', action.payload);
         },
         updateComponentPosition: (state, action) => {
-            const { id, position, delete: shouldDelete } = action.payload;
+            const { id, position, containerId, delete: shouldDelete } = action.payload;
 
             if (shouldDelete) {
                 state.list = state.list.filter(comp => comp.id !== id);
@@ -54,9 +74,16 @@ const componentsSlice = createSlice({
 
             const component = state.list.find(comp => comp.id === id);
             if (component) {
-                // Update the position properties directly
+                // Update the position properties
                 component.x = position.x;
                 component.y = position.y;
+
+                // Update container relationship if provided
+                if (containerId !== undefined) {
+                    component.containerId = containerId;
+                    console.log(`Component ${id} container updated to:`, containerId);
+                }
+
                 console.log(`Component ${id} position updated to (${position.x}, ${position.y})`);
             } else {
                 console.warn(`updateComponentPosition: Component with ID ${id} not found`);
@@ -67,6 +94,33 @@ const componentsSlice = createSlice({
         },
         setGhostLine: (state, action) => {
             state.ghostLine = action.payload;
+        },
+        resizeContainer: (state, action) => {
+            const { id, width, height } = action.payload;
+            const container = state.list.find(comp => comp.id === id);
+
+            if (container) {
+                // Validate the component is a container
+                const metadata = getComponentMetadata(container.type);
+                if (metadata && metadata.isContainer) {
+                    container.width = width;
+                    container.height = height;
+                    console.log(`Container ${id} resized to ${width}x${height}`);
+                }
+            }
+        },
+        moveContainedComponents: (state, action) => {
+            const { containerId, dx, dy } = action.payload;
+
+            // Move all components that are in this container
+            state.list.forEach(component => {
+                if (component.containerId === containerId) {
+                    component.x += dx;
+                    component.y += dy;
+                }
+            });
+
+            console.log(`Moved components in container ${containerId} by (${dx}, ${dy})`);
         }
     }
 });
@@ -79,7 +133,9 @@ export const {
     removeComponent,
     updateComponentPosition,
     setDraggingComponent,
-    setGhostLine
+    setGhostLine,
+    resizeContainer,
+    moveContainedComponents
 } = componentsSlice.actions;
 
 // Selectors

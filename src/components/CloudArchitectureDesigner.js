@@ -217,8 +217,17 @@ const CloudArchitectureDesigner = () => {
         const defaultProps = getDefaultProperties(componentType);
 
         // Set component size based on type and metadata
-        let width = metadata.size?.width || 40;
-        let height = metadata.size?.height || 40;
+        let width, height;
+
+        if (metadata.isContainer) {
+            // Containers like VPC and subnet should be larger
+            width = metadata.size?.width || 300;
+            height = metadata.size?.height || 200;
+        } else {
+            // Regular components
+            width = metadata.size?.width || 40;
+            height = metadata.size?.height || 40;
+        }
 
         // Create new component
         const newComponent = {
