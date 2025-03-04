@@ -37,6 +37,77 @@ import useCanvasControls from '../../hooks/useCanvasControls';
 // Import utilities
 import { getComponentMetadata } from '../../services/aws';
 
+// Debug utility for tracking drag events
+const useDragEventDebugger = (isDebugEnabled) => {
+    useEffect(() => {
+        if (!isDebugEnabled) return;
+
+        // Create a div for debugging if it doesn't exist
+        let debugDiv = document.getElementById('drag-event-debug');
+        if (!debugDiv) {
+            debugDiv = document.createElement('div');
+            debugDiv.id = 'drag-event-debug';
+            debugDiv.style.position = 'fixed';
+            debugDiv.style.bottom = '10px';
+            debugDiv.style.right = '10px';
+            debugDiv.style.width = '300px';
+            debugDiv.style.height = '200px';
+            debugDiv.style.backgroundColor = 'rgba(0,0,0,0.8)';
+            debugDiv.style.color = 'white';
+            debugDiv.style.padding = '10px';
+            debugDiv.style.overflow = 'auto';
+            debugDiv.style.fontFamily = 'monospace';
+            debugDiv.style.fontSize = '12px';
+            debugDiv.style.zIndex = '9999';
+            document.body.appendChild(debugDiv);
+        }
+
+        // Clear the debug div
+        debugDiv.innerHTML = '<h3>Drag Event Debug</h3>';
+
+        // Function to log events
+        window.logDragEvent = (eventType, componentId, componentType) => {
+            const entry = document.createElement('div');
+            entry.textContent = `${eventType}: ${componentType} (${componentId ? componentId.slice(-4) : 'unknown'})`;
+            entry.style.borderBottom = '1px solid #333';
+            entry.style.padding = '2px 0';
+
+            // Different colors for different events
+            if (eventType.includes('start')) entry.style.color = '#4caf50';
+            if (eventType.includes('move')) entry.style.color = '#2196f3';
+            if (eventType.includes('end')) entry.style.color = '#ff9800';
+
+            // Add timestamp
+            const time = new Date();
+            const timeStr = `${time.getHours()}:${time.getMinutes()}:${time.getSeconds()}.${time.getMilliseconds()}`;
+            entry.textContent = `[${timeStr}] ${entry.textContent}`;
+
+            // Keep only last 20 entries
+            if (debugDiv.children.length > 20) {
+                debugDiv.removeChild(debugDiv.children[1]);
+            }
+
+            debugDiv.appendChild(entry);
+        };
+
+        return () => {
+            // Cleanup
+            window.logDragEvent = undefined;
+            if (debugDiv) {
+                document.body.removeChild(debugDiv);
+            }
+        };
+    }, [isDebugEnabled]);
+
+    return {
+        logDragEvent: (eventType, componentId, componentType) => {
+            if (isDebugEnabled && window.logDragEvent) {
+                window.logDragEvent(eventType, componentId, componentType);
+            }
+        }
+    };
+};
+
 const OptimizedCanvasContainer = ({ onComponentSelect, showNotification }) => {
     const dispatch = useDispatch();
     const stageRef = useRef(null);
@@ -51,6 +122,7 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification }) => {
     const [selectedConnectionId, setSelectedConnectionId] = useState(null);
     const [isDragging, setIsDragging] = useState(false);
     const [draggedOverContainer, setDraggedOverContainer] = useState(null);
+    const [isDebugEnabled, setIsDebugEnabled] = useState(false);
 
     // Canvas controls (zoom, pan)
     const {
@@ -61,6 +133,9 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification }) => {
         handleWheel,
         resetView
     } = useCanvasControls();
+
+    // Debug utility
+    const { logDragEvent } = useDragEventDebugger(isDebugEnabled);
 
     // Connection mode hook
     const {
@@ -98,6 +173,19 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification }) => {
         return () => window.removeEventListener('resize', handleResize);
     }, []);
 
+    // Add keyboard shortcut for debug mode
+    useEffect(() => {
+        const handleKeyDown = (e) => {
+            if (e.key === 'd' && e.ctrlKey) {
+                setIsDebugEnabled(prev => !prev);
+                console.log('Debug mode toggled:', !isDebugEnabled);
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [isDebugEnabled]);
+
     // Organize components by container
     const organizedComponents = useMemo(() => {
         // Start with containers (VPCs, Subnets)
@@ -133,6 +221,70 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification }) => {
             standaloneComponents
         };
     }, [canvasComponents]);
+
+    // 1. isPointInContainer function
+    const isPointInContainer = useCallback((x, y, container) => {
+        // Add debugging log
+        if (isDebugEnabled) {
+            console.log(`Checking if point (${x}, ${y}) is in container:`, container.id, container.type);
+        }
+
+        // Make sure we have valid dimensions
+        const containerWidth = container.width || 300;
+        const containerHeight = container.height || 200;
+
+        const result = (
+            x >= container.x &&
+            x <= container.x + containerWidth &&
+            y >= container.y &&
+            y <= container.y + containerHeight
+        );
+
+        if (isDebugEnabled && result) {
+            console.log(`Point (${x}, ${y}) is inside container ${container.id} (${container.type})`);
+        }
+
+        return result;
+    }, [isDebugEnabled]);
+
+    // 2. findContainerAt function
+    const findContainerAt = useCallback((x, y, componentType) => {
+        if (isDebugEnabled) {
+            console.log(`Finding container at (${x}, ${y}) for component type: ${componentType}`);
+        }
+
+        // Get all containers that could potentially contain this component type
+        const potentialContainers = organizedComponents.containers.filter(container => {
+            // Get container metadata
+            const metadata = getComponentMetadata(container.type);
+
+            // Check if this container can contain the component type
+            return metadata &&
+                metadata.canContain &&
+                metadata.canContain.includes(componentType);
+        });
+
+        if (isDebugEnabled) {
+            console.log('Potential containers:', potentialContainers.map(c => `${c.type}-${c.id.slice(-4)}`));
+        }
+
+        // Reverse to check top-most containers first (those rendered last)
+        const reversedContainers = [...potentialContainers].reverse();
+
+        for (const container of reversedContainers) {
+            if (isPointInContainer(x, y, container)) {
+                if (isDebugEnabled) {
+                    console.log(`Found valid container: ${container.id} (${container.type})`);
+                }
+                return container;
+            }
+        }
+
+        if (isDebugEnabled) {
+            console.log('No container found for this component type');
+        }
+        return null;
+    }, [isPointInContainer, organizedComponents.containers, isDebugEnabled, getComponentMetadata]);
 
     // Handle component click
     const handleComponentClick = useCallback((e, component) => {
@@ -197,101 +349,152 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification }) => {
         }
     }, [isLineMode, updateGhostLine]);
 
-    // Check if a point is within a container's bounds
-    const isPointInContainer = useCallback((x, y, container) => {
-        return (
-            x >= container.x &&
-            x <= container.x + (container.width || 200) &&
-            y >= container.y &&
-            y <= container.y + (container.height || 150)
-        );
-    }, []);
-
-    // Find the container a point is in (if any)
-    const findContainerAt = useCallback((x, y) => {
-        // Reverse to check top-most containers first
-        const reversedContainers = [...organizedComponents.containers].reverse();
-
-        for (const container of reversedContainers) {
-            if (isPointInContainer(x, y, container)) {
-                return container;
-            }
-        }
-        return null;
-    }, [isPointInContainer, organizedComponents.containers]);
-
-    // Component drag handlers
+    // 3. handleDragStart function
     const handleDragStart = useCallback((e, componentId) => {
         setIsDragging(true);
         const component = canvasComponents.find(c => c.id === componentId);
         if (!component) return;
 
-        console.log(`Component ${componentId} drag started`);
-    }, [canvasComponents]);
+        logDragEvent('dragStart', componentId, component.type);
+        console.log(`Component ${componentId} (${component.type}) drag started`);
 
+        // Add visual feedback
+        e.target.setAttrs({
+            shadowOffset: { x: 3, y: 3 },
+            shadowBlur: 6,
+            scaleX: 1.02,
+            scaleY: 1.02
+        });
+    }, [canvasComponents, logDragEvent]);
+
+    // 4. handleDragMove function
     const handleDragMove = useCallback((e, componentId) => {
         if (!isDragging) return;
 
         const component = canvasComponents.find(c => c.id === componentId);
         if (!component) return;
 
-        // Skip container check if this is a container itself
-        const metadata = getComponentMetadata(component.type);
-        if (metadata && metadata.isContainer) return;
+        logDragEvent('dragMove', componentId, component.type);
+        console.log(`Component ${componentId} (${component.type}) dragging`);
 
         // Get current position
         const stage = e.target.getStage();
         const x = e.target.x();
         const y = e.target.y();
 
-        // Check if we're over a container
-        const container = findContainerAt(x, y);
+        // Check component metadata to see if it can be contained
+        const metadata = getComponentMetadata(component.type);
+        const canBeContained = !metadata ||
+            (metadata.mustBeContainedBy && metadata.mustBeContainedBy.length > 0);
+
+        // Skip container check if this component can't be contained
+        if (!canBeContained) {
+            console.log(`Component ${component.type} cannot be contained, skipping container check`);
+            return;
+        }
+
+        // Check if we're over a valid container
+        const container = findContainerAt(x, y, component.type);
 
         // Update highlight state
         setDraggedOverContainer(container ? container.id : null);
-    }, [isDragging, canvasComponents, findContainerAt]);
 
-// In OptimizedCanvasContainer.js
+        if (container) {
+            console.log(`Dragging over container ${container.id} (${container.type})`);
+        }
+    }, [isDragging, canvasComponents, findContainerAt, getComponentMetadata, logDragEvent]);
+
+    // 5. handleContainerDragMove function
+    const handleContainerDragMove = useCallback((e, containerId) => {
+        if (!isDragging) return;
+
+        logDragEvent('containerDragMove', containerId, 'container');
+        console.log(`Container ${containerId} drag move called`);
+
+        // Get container component
+        const container = canvasComponents.find(c => c.id === containerId);
+        if (!container) return;
+
+        // Get current position
+        const x = e.target.x();
+        const y = e.target.y();
+
+        // Check if this container can be contained by another container
+        const metadata = getComponentMetadata(container.type);
+        const canBeContained = metadata &&
+            metadata.mustBeContainedBy &&
+            metadata.mustBeContainedBy.length > 0;
+
+        if (canBeContained) {
+            console.log(`Container ${container.type} can be contained by:`, metadata.mustBeContainedBy);
+
+            // Check if we're over a valid parent container
+            const parentContainer = findContainerAt(x, y, container.type);
+
+            // Update highlight state
+            setDraggedOverContainer(parentContainer ? parentContainer.id : null);
+
+            if (parentContainer) {
+                console.log(`Container ${containerId} dragging over parent ${parentContainer.id} (${parentContainer.type})`);
+            }
+        } else {
+            console.log(`Container ${container.type} cannot be contained by any other container`);
+        }
+    }, [isDragging, canvasComponents, findContainerAt, getComponentMetadata, logDragEvent]);
+
+    // 6. handleDragEnd function
     const handleDragEnd = useCallback((e, componentId) => {
         setIsDragging(false);
         const component = canvasComponents.find(c => c.id === componentId);
         if (!component) return;
 
+        logDragEvent('dragEnd', componentId, component.type);
+
+        // Reset visual effects
+        e.target.setAttrs({
+            shadowOffset: { x: 0, y: 0 },
+            shadowBlur: 0,
+            scaleX: 1,
+            scaleY: 1
+        });
+
         // Get the new position
         const newX = e.target.x();
         const newY = e.target.y();
 
-        // Check if dropped in trash area
+        console.log(`Component ${componentId} (${component.type}) drag ended at (${newX}, ${newY})`);
+
+        // Check for trash area drop
         const stage = stageRef.current.getStage();
         const pointerPosition = stage.getPointerPosition();
-
-        // Define trash area bounds (top right corner)
         const inTrashArea = (
             pointerPosition.x > (canvasSize.width - 150) &&
             pointerPosition.y < 150
         );
 
-        // If in trash area, prioritize deletion
         if (inTrashArea) {
             dispatch(removeComponent(componentId));
             dispatch(removeComponentConnections(componentId));
             setSelectedComponentId(null);
-            showNotification && showNotification('Component deleted', 'success');
-            return; // Exit early to prevent further processing
+            showNotification('Component deleted', 'success');
+            return;
         }
 
-        // Rest of the existing drag end logic...
+        // Container handling
         const containerData = {};
 
-        // Skip container check if this is a container itself
+        // Check component metadata to see if it can be contained
         const metadata = getComponentMetadata(component.type);
-        if (!metadata?.isContainer) {
-            const container = findContainerAt(newX, newY);
+        const canBeContained = !metadata ||
+            (metadata.mustBeContainedBy && metadata.mustBeContainedBy.length > 0);
+
+        if (canBeContained) {
+            const container = findContainerAt(newX, newY, component.type);
+
             if (container) {
                 containerData.containerId = container.id;
-                console.log(`Component ${componentId} dropped in container ${container.id}`);
+                console.log(`Component ${componentId} dropped in container ${container.id} (${container.type})`);
 
-                // Use regular showNotification for container placement
                 showNotification(
                     `Placed ${component.type.toUpperCase()} in ${container.type.toUpperCase()}`,
                     'success'
@@ -299,91 +502,53 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification }) => {
             } else if (component.containerId) {
                 // Component was removed from a container
                 containerData.containerId = null;
+                console.log(`Component ${componentId} removed from container ${component.containerId}`);
             }
         }
 
-        // Reset any highlighted containers
+        // Reset highlighted containers
         setDraggedOverContainer(null);
 
-        // Dispatch position update with container info if needed
+        // Update position and container
         dispatch(updateComponentPosition({
             id: componentId,
             position: { x: newX, y: newY },
             ...containerData
         }));
+    }, [
+        dispatch,
+        canvasComponents,
+        canvasSize,
+        showNotification,
+        findContainerAt,
+        removeComponent,
+        removeComponentConnections,
+        updateComponentPosition,
+        getComponentMetadata,
+        logDragEvent
+    ]);
 
-        // Use regular showNotification for movement
-        // showNotification(
-        //     `${component.type.toUpperCase()} component moved`,
-        //     'info'
-        // );
-    }, [dispatch, canvasComponents, canvasSize, showNotification, findContainerAt]);
-
-// Create a debounced version of showNotification outside of the component
-    const debouncedShowNotification = debounce((message, type) => {
-        showNotification(message, type);
-    }, 500); // 500ms delay between notifications
-
-    // Handler when a container is dragged
-    const handleContainerDragMove = useCallback((e, containerId) => {
-        if (!isDragging) return;
-
-        // Update positions of all contained components to move with the container
-        const containerComponents = organizedComponents.containedComponents.get(containerId) || [];
-
-        // Get the container's movement delta
-        const container = canvasComponents.find(c => c.id === containerId);
-        if (!container) return;
-
-        const dx = e.target.x() - container.x;
-        const dy = e.target.y() - container.y;
-
-        // We're not updating the actual components here since they'll be
-        // updated when the container's drag ends
-        console.log(`Container moved by dx=${dx}, dy=${dy}. Will move ${containerComponents.length} contained components`);
-    }, [isDragging, canvasComponents, organizedComponents.containedComponents]);
-
+    // 7. handleContainerDragEnd function
     const handleContainerDragEnd = useCallback((e, containerId) => {
         setIsDragging(false);
         const container = canvasComponents.find(c => c.id === containerId);
         if (!container) return;
 
+        logDragEvent('containerDragEnd', containerId, container.type);
+
         // Get the new position
         const newX = e.target.x();
         const newY = e.target.y();
+
+        console.log(`Container ${containerId} (${container.type}) drag ended at (${newX}, ${newY})`);
 
         // Calculate movement delta
         const dx = newX - container.x;
         const dy = newY - container.y;
 
-        console.log(`Container ${containerId} dragged to:`, { x: newX, y: newY });
-
-        // First update the container position
-        dispatch(updateComponentPosition({
-            id: containerId,
-            position: { x: newX, y: newY }
-        }));
-
-        // Then update all contained components to move with the container
-        const containerComponents = organizedComponents.containedComponents.get(containerId) || [];
-        containerComponents.forEach(component => {
-            dispatch(updateComponentPosition({
-                id: component.id,
-                position: { x: component.x + dx, y: component.y + dy }
-            }));
-        });
-
-        // Show notification
-        // showNotification && showNotification(
-        //     `${container.type.toUpperCase()} container moved`,
-        //     'info'
-        // );
-
-        // Check if dropped in trash area
+        // Check for trash area drop
         const stage = stageRef.current.getStage();
         const pointerPosition = stage.getPointerPosition();
-
-        // Define trash area bounds (top right corner)
         const inTrashArea = (
             pointerPosition.x > (canvasSize.width - 150) &&
             pointerPosition.y < 150
@@ -404,14 +569,70 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification }) => {
             dispatch(removeComponentConnections(containerId));
 
             setSelectedComponentId(null);
-            showNotification && showNotification('Container and its contents deleted', 'success');
+            showNotification('Container and its contents deleted', 'success');
+            return;
         }
 
-        // debouncedShowNotification(
-        //     `${container.type.toUpperCase()} container moved`,
-        //     'info'
-        // );
-    }, [canvasComponents, dispatch, organizedComponents.containedComponents, showNotification, canvasSize.width, debouncedShowNotification]);
+        // Check if this container can be contained by another container
+        const metadata = getComponentMetadata(container.type);
+        const canBeContained = metadata &&
+            metadata.mustBeContainedBy &&
+            metadata.mustBeContainedBy.length > 0;
+
+        // Container relationship handling
+        const containerData = {};
+
+        if (canBeContained) {
+            const parentContainer = findContainerAt(newX, newY, container.type);
+
+            if (parentContainer) {
+                containerData.containerId = parentContainer.id;
+                console.log(`Container ${containerId} placed in parent container ${parentContainer.id} (${parentContainer.type})`);
+
+                showNotification(
+                    `Placed ${container.type.toUpperCase()} in ${parentContainer.type.toUpperCase()}`,
+                    'success'
+                );
+            } else if (container.containerId) {
+                // Container was removed from its parent
+                containerData.containerId = null;
+                console.log(`Container ${containerId} removed from parent container ${container.containerId}`);
+            }
+        }
+
+        // First update the container position and relationships
+        dispatch(updateComponentPosition({
+            id: containerId,
+            position: { x: newX, y: newY },
+            ...containerData
+        }));
+
+        // Then update all contained components to move with the container
+        const containerComponents = organizedComponents.containedComponents.get(containerId) || [];
+        containerComponents.forEach(component => {
+            dispatch(updateComponentPosition({
+                id: component.id,
+                position: { x: component.x + dx, y: component.y + dy }
+            }));
+        });
+
+        // Reset highlighted containers
+        setDraggedOverContainer(null);
+    }, [
+        canvasComponents,
+        canvasSize,
+        dispatch,
+        organizedComponents.containedComponents,
+        removeComponent,
+        removeComponentConnections,
+        setDraggedOverContainer,
+        setSelectedComponentId,
+        showNotification,
+        updateComponentPosition,
+        findContainerAt,
+        getComponentMetadata,
+        logDragEvent
+    ]);
 
     // Render connections between components
     const renderConnections = useMemo(() => {
@@ -439,7 +660,7 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification }) => {
         });
     }, [canvasComponents, connections, selectedConnectionId, dispatch, showNotification]);
 
-// Render a container with its contained components
+    // 8. Modified renderContainer function
     const renderContainer = useCallback((container) => {
         const isSelected = selectedComponentId === container.id;
         const isHighlighted = draggedOverContainer === container.id;
@@ -454,6 +675,7 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification }) => {
                 isSelected={isSelected}
                 isHighlighted={isHighlighted}
                 onClick={handleComponentClick}
+                onDragStart={(e) => handleDragStart(e, container.id)}
                 onDragMove={(e) => handleContainerDragMove(e, container.id)}
                 onDragEnd={(e) => handleContainerDragEnd(e, container.id)}
             >
@@ -477,16 +699,88 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification }) => {
         draggedOverContainer,
         organizedComponents.containedComponents,
         handleComponentClick,
+        handleDragStart,
         handleContainerDragMove,
         handleContainerDragEnd,
-        handleDragStart,
         handleDragMove,
         handleDragEnd,
         isLineMode
     ]);
 
+    // 9. Debug helper component
+    const ContainerDebugger = () => {
+        if (!isDebugEnabled) return null;
+
+        return (
+            <div style={{
+                position: 'fixed',
+                top: 10,
+                left: 10,
+                width: 300,
+                background: 'rgba(0,0,0,0.8)',
+                color: 'white',
+                padding: 10,
+                borderRadius: 4,
+                fontSize: 12,
+                zIndex: 9999,
+                pointerEvents: 'none'
+            }}>
+                <h3 style={{ margin: '0 0 8px 0', fontSize: 14 }}>Container Debug</h3>
+
+                <div style={{ margin: '5px 0' }}>
+                    <strong>Dragging:</strong> {isDragging ? '✓' : '✗'}
+                    <span style={{ marginLeft: 10 }}>
+                        {draggedOverContainer ? `Over: ${draggedOverContainer.slice(-4)}` : ''}
+                    </span>
+                </div>
+
+                <div style={{ margin: '5px 0' }}>
+                    <strong>Containers:</strong>
+                    <ul style={{ margin: '5px 0', padding: '0 0 0 20px' }}>
+                        {organizedComponents.containers.map(container => (
+                            <li key={container.id}>
+                                {container.type} ({container.id.slice(-4)})
+                                {draggedOverContainer === container.id &&
+                                    <span style={{ color: '#4caf50', marginLeft: 5 }}>ACTIVE</span>
+                                }
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+
+                <div style={{ margin: '5px 0' }}>
+                    <strong>Containment Rules:</strong>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 5, fontSize: 10 }}>
+                        <thead>
+                        <tr>
+                            <th style={{ textAlign: 'left' }}>Type</th>
+                            <th style={{ textAlign: 'left' }}>Is Container</th>
+                            <th style={{ textAlign: 'left' }}>Can Be In</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        {['ec2', 's3', 'vpc', 'subnet', 'rds'].map(type => {
+                            const metadata = getComponentMetadata(type);
+                            return (
+                                <tr key={type}>
+                                    <td>{type}</td>
+                                    <td>{metadata?.isContainer ? '✓' : '✗'}</td>
+                                    <td>{metadata?.mustBeContainedBy?.join(', ') || 'none'}</td>
+                                </tr>
+                            );
+                        })}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        );
+    };
+
     return (
         <div className="canvas-container relative h-full w-full">
+            {/* Debug overlay when enabled */}
+            {isDebugEnabled && <ContainerDebugger />}
+
             {/* Main canvas */}
             <Stage
                 ref={stageRef}

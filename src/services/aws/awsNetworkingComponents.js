@@ -22,7 +22,7 @@ export const networkingComponents = {
             { type: 'checkbox', key: 'enableDnsHostnames', label: 'DNS Hostnames' }
         ],
         allowedConnections: ['subnet', 'internetGateway', 'natGateway'],
-        // VPCs are containers for subnets
+        // VPCs are containers for subnets - EXPLICIT containment definition
         isContainer: true,
         canContain: ['subnet'],
         size: { width: 300, height: 250 },
@@ -68,10 +68,10 @@ resource "aws_vpc" "${sanitizeResourceName(component.name || `vpc-${component.id
             { type: 'checkbox', key: 'public', label: 'Public Subnet' }
         ],
         allowedConnections: ['ec2', 'rds', 'elasticache', 'lambda'],
-        // Subnets are containers for resources, and are contained by VPCs
+        // Subnets are containers for resources, and MUST be contained by VPCs
         isContainer: true,
         canContain: ['ec2', 'rds', 'elasticache', 'lambda'],
-        mustBeContainedBy: ['vpc'],
+        mustBeContainedBy: ['vpc'], // EXPLICIT containment requirement
         size: { width: 200, height: 150 },
         terraformTemplate: (component, parentVpc) => `
 resource "aws_subnet" "${sanitizeResourceName(component.name || `subnet-${component.id.slice(-4)}`)}" {

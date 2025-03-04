@@ -9,6 +9,7 @@ const ContainerComponent = ({
                                 isSelected,
                                 isHighlighted,
                                 onClick,
+                                onDragStart,
                                 onDragMove,
                                 onDragEnd
                             }) => {
@@ -62,10 +63,17 @@ const ContainerComponent = ({
             shadowBlur: 10,
             shadowOpacity: 0.2
         });
+
+        // CRITICAL FIX: Call the parent handler
+        if (onDragStart) {
+            onDragStart(e, id);
+        }
     };
 
     const handleDragMove = (e) => {
         console.log('Container drag move:', id);
+
+        // CRITICAL FIX: Call the parent handler
         if (onDragMove) {
             onDragMove(e, id);
         }
@@ -84,6 +92,7 @@ const ContainerComponent = ({
             shadowOpacity: 0
         });
 
+        // CRITICAL FIX: Call the parent handler
         if (onDragEnd) {
             onDragEnd(e, id);
         }
