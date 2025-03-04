@@ -16,26 +16,18 @@ function App() {
     useEffect(() => {
         console.log('Initializing application and loading saved state');
 
-        // Flag to prevent duplicate initialization
-        const initialized = localStorage.getItem('staginfra_initialized');
+        // Always load saved components
+        const savedComponents = getComponents();
+        console.log('Found saved components:', savedComponents.length);
+        if (savedComponents.length > 0) {
+            dispatch(loadComponents(savedComponents));
+        }
 
-        if (!initialized) {
-            // Load saved components
-            const savedComponents = getComponents();
-            console.log('Found saved components:', savedComponents.length);
-            if (savedComponents.length > 0) {
-                dispatch(loadComponents(savedComponents));
-            }
-
-            // Load saved connections
-            const savedConnections = getConnections();
-            console.log('Found saved connections:', savedConnections.length);
-            if (savedConnections.length > 0) {
-                dispatch(loadConnections(savedConnections));
-            }
-
-            // Set initialization flag
-            localStorage.setItem('staginfra_initialized', 'true');
+        // Always load saved connections
+        const savedConnections = getConnections();
+        console.log('Found saved connections:', savedConnections.length);
+        if (savedConnections.length > 0) {
+            dispatch(loadConnections(savedConnections));
         }
 
         // Check backend connection

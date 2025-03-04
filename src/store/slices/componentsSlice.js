@@ -1,6 +1,7 @@
 // src/store/slices/componentsSlice.js
 import { createSlice } from '@reduxjs/toolkit';
 import { getComponentMetadata } from '../../services/aws';
+import { saveComponents, debouncedSaveComponents } from '../../services/utils/storageService';
 
 const componentsSlice = createSlice({
     name: 'components',
@@ -32,6 +33,9 @@ const componentsSlice = createSlice({
 
                 state.list.push(action.payload);
                 console.log('Component added:', action.payload.id);
+
+                // Save to localStorage
+                debouncedSaveComponents(state.list);
             }
         },
         updateComponent: (state, action) => {
@@ -40,6 +44,9 @@ const componentsSlice = createSlice({
             if (component) {
                 Object.assign(component, changes);
                 console.log('Component updated:', id);
+
+                // Save to localStorage
+                debouncedSaveComponents(state.list);
             }
         },
         updateComponentsFromStorage: (state, action) => {
@@ -48,6 +55,9 @@ const componentsSlice = createSlice({
             if (component) {
                 component[field] = value;
                 console.log(`Component ${id} field ${field} updated to:`, value);
+
+                // Save to localStorage
+                debouncedSaveComponents(state.list);
             }
         },
         removeComponent: (state, action) => {
@@ -62,6 +72,9 @@ const componentsSlice = createSlice({
             });
 
             console.log('Component removed:', action.payload);
+
+            // Save to localStorage
+            debouncedSaveComponents(state.list);
         },
         updateComponentPosition: (state, action) => {
             const { id, position, containerId, delete: shouldDelete } = action.payload;
@@ -69,6 +82,9 @@ const componentsSlice = createSlice({
             if (shouldDelete) {
                 state.list = state.list.filter(comp => comp.id !== id);
                 console.log('Component deleted during position update:', id);
+
+                // Save to localStorage
+                debouncedSaveComponents(state.list);
                 return;
             }
 
@@ -85,6 +101,9 @@ const componentsSlice = createSlice({
                 }
 
                 console.log(`Component ${id} position updated to (${position.x}, ${position.y})`);
+
+                // Save to localStorage
+                debouncedSaveComponents(state.list);
             } else {
                 console.warn(`updateComponentPosition: Component with ID ${id} not found`);
             }
@@ -106,6 +125,9 @@ const componentsSlice = createSlice({
                     container.width = width;
                     container.height = height;
                     console.log(`Container ${id} resized to ${width}x${height}`);
+
+                    // Save to localStorage
+                    debouncedSaveComponents(state.list);
                 }
             }
         },
@@ -121,6 +143,9 @@ const componentsSlice = createSlice({
             });
 
             console.log(`Moved components in container ${containerId} by (${dx}, ${dy})`);
+
+            // Save to localStorage
+            debouncedSaveComponents(state.list);
         }
     }
 });

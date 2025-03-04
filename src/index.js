@@ -7,8 +7,7 @@ import App from './App';
 import './styles/utilities.css';
 import './styles/components.css'; // Add CSS for container components
 
-// Clear initialization flag to ensure proper loading
-localStorage.removeItem('staginfra_initialized');
+// We've removed the line that clears the initialization flag
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
