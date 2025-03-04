@@ -12,7 +12,8 @@ import useConnectionMode from '../../hooks/useConnectionMode';
 import {
     updateComponentPosition,
     selectComponents,
-    removeComponent
+    removeComponent,
+    moveContainerAndContents
 } from '../../store/slices/componentsSlice';
 
 import {
@@ -36,6 +37,7 @@ import useCanvasControls from '../../hooks/useCanvasControls';
 
 // Import utilities
 import { getComponentMetadata } from '../../services/aws';
+import { store } from '../../store';
 
 // Debug utility for tracking drag events
 const useDragEventDebugger = (isDebugEnabled) => {
@@ -238,7 +240,7 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification }) => {
             standaloneComponents
         };
     }, [canvasComponents]);
-    
+
     const isPointInContainer = useCallback((x, y, container) => {
         // Add debugging log
         if (isDebugEnabled) {
@@ -382,7 +384,7 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification }) => {
                 cancelConnection();
             }
         }
-    }, [dispatch, isLineMode, connectionStartComponent, onComponentSelect, cancelConnection]);
+    }, [isLineMode, onComponentSelect, cancelConnection]);
 
     // Handle mouse move for drawing connections
     const handleMouseMove = useCallback((e) => {
@@ -391,7 +393,7 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification }) => {
         }
     }, [isLineMode, updateGhostLine]);
 
-    // 3. handleDragStart function
+    // Handle drag start
     const handleDragStart = useCallback((e, componentId) => {
         setIsDragging(true);
         const component = canvasComponents.find(c => c.id === componentId);
@@ -409,7 +411,7 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification }) => {
         });
     }, [canvasComponents, logDragEvent]);
 
-    // 4. handleDragMove function
+    // Handle drag move
     const handleDragMove = useCallback((e, componentId) => {
         if (!isDragging) return;
 
@@ -444,9 +446,9 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification }) => {
         if (container) {
             console.log(`Dragging over container ${container.id} (${container.type})`);
         }
-    }, [isDragging, canvasComponents, findContainerAt, getComponentMetadata, logDragEvent]);
+    }, [isDragging, canvasComponents, findContainerAt, logDragEvent]);
 
-    // 5. handleContainerDragMove function
+    // Handle container drag move
     const handleContainerDragMove = useCallback((e, containerId) => {
         if (!isDragging) return;
 
@@ -484,6 +486,7 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification }) => {
         }
     }, [isDragging, canvasComponents, findContainerAt, logDragEvent]);
 
+    // Handle drag end for components
     const handleDragEnd = useCallback((e, componentId) => {
         setIsDragging(false);
         const component = canvasComponents.find(c => c.id === componentId);
@@ -523,6 +526,8 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification }) => {
 
         // Container handling
         let updatedContainerId = component.containerId;
+        let adjustedX = newX;
+        let adjustedY = newY;
 
         // Check component metadata to see if it can be contained
         const metadata = getComponentMetadata(component.type);
@@ -537,16 +542,46 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification }) => {
                 updatedContainerId = container.id;
                 console.log(`Component ${componentId} dropped in container ${container.id} (${container.type})`);
 
+                // IMPORTANT: Adjust position to be relative to container
+                // This is key to making components appear visually inside their containers
+                adjustedX = newX - container.x;
+                adjustedY = newY - container.y;
+
+                // Add some padding from container header (30px height)
+                if (adjustedY < 40) {
+                    adjustedY = 40;
+                }
+
+                // Ensure the component stays within container bounds
+                const componentWidth = component.width || 40;
+                const componentHeight = component.height || 40;
+
+                if (adjustedX < 10) adjustedX = 10;
+                if (adjustedY < 40) adjustedY = 40;
+                if (adjustedX + componentWidth > container.width - 10) {
+                    adjustedX = container.width - componentWidth - 10;
+                }
+                if (adjustedY + componentHeight > container.height - 10) {
+                    adjustedY = container.height - componentHeight - 10;
+                }
+
                 showNotification(
                     `Placed ${component.type.toUpperCase()} in ${container.type.toUpperCase()}`,
                     'success'
                 );
-            } else {
-                // If component was previously in a container but is now outside any container
-                if (component.containerId) {
-                    updatedContainerId = null;
-                    console.log(`Component ${componentId} removed from container ${component.containerId}`);
+            } else if (component.containerId) {
+                // Component was previously in a container but is now outside any container
+                // Find the previous container to get its position
+                const previousContainer = canvasComponents.find(c => c.id === component.containerId);
+
+                if (previousContainer) {
+                    // Adjust position to be absolute (outside container)
+                    adjustedX = newX; // Already absolute since this is from the drag
+                    adjustedY = newY;
                 }
+
+                updatedContainerId = null;
+                console.log(`Component ${componentId} removed from container ${component.containerId}`);
             }
         }
 
@@ -556,11 +591,12 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification }) => {
         // Update component position and containment in a single dispatch
         dispatch(updateComponentPosition({
             id: componentId,
-            position: { x: newX, y: newY },
+            position: { x: adjustedX, y: adjustedY },
             containerId: updatedContainerId
         }));
     }, [dispatch, canvasComponents, canvasSize, showNotification, findContainerAt, logDragEvent]);
 
+    // Handle container drag end
     const handleContainerDragEnd = useCallback((e, containerId) => {
         setIsDragging(false);
         const container = canvasComponents.find(c => c.id === containerId);
@@ -636,26 +672,38 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification }) => {
         // Prevent containers from containing themselves or their parents
         const isValidContainer = (parentContainer) => {
             if (!parentContainer) return true;
-
-            // Can't contain itself
             if (parentContainer.id === containerId) return false;
 
-            // Check if this is an ancestor
             let current = parentContainer;
             while (current) {
                 if (current.containerId === containerId) return false;
                 current = canvasComponents.find(c => c.id === current.containerId);
             }
-
             return true;
         };
+
+        let adjustedX = newX;
+        let adjustedY = newY;
 
         if (canBeContained) {
             const parentContainer = findContainerAt(newX, newY, container.type);
 
             if (parentContainer && isValidContainer(parentContainer)) {
                 updatedContainerId = parentContainer.id;
-                console.log(`Container ${containerId} placed in parent container ${parentContainer.id} (${parentContainer.type})`);
+
+                // Adjust container position to be relative to parent container
+                adjustedX = newX - parentContainer.x;
+                adjustedY = newY - parentContainer.y;
+
+                // Add some padding from container edges
+                if (adjustedX < 10) adjustedX = 10;
+                if (adjustedY < 40) adjustedY = 40; // Allow for header
+                if (adjustedX + container.width > parentContainer.width - 10) {
+                    adjustedX = parentContainer.width - container.width - 10;
+                }
+                if (adjustedY + container.height > parentContainer.height - 10) {
+                    adjustedY = parentContainer.height - container.height - 10;
+                }
 
                 showNotification(
                     `Placed ${container.type.toUpperCase()} in ${parentContainer.type.toUpperCase()}`,
@@ -663,70 +711,85 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification }) => {
                 );
             } else if (container.containerId) {
                 // Container was removed from its parent
+                const previousParent = canvasComponents.find(c => c.id === container.containerId);
+
+                if (previousParent) {
+                    // Already have absolute position from the drag
+                    adjustedX = newX;
+                    adjustedY = newY;
+                }
+
                 updatedContainerId = null;
-                console.log(`Container ${containerId} removed from parent container ${container.containerId}`);
             }
         }
 
-        // First update the container position and relationships
+        // First update the container position
         dispatch(updateComponentPosition({
             id: containerId,
-            position: { x: newX, y: newY },
+            position: { x: adjustedX, y: adjustedY },
             containerId: updatedContainerId
         }));
 
-        // Function to update all components inside a container
-        const updateAllContainedComponents = (containerId, dx, dy) => {
-            const directComponents = organizedComponents.containedComponents.get(containerId) || [];
-
-            // Update direct components
-            directComponents.forEach(component => {
-                dispatch(updateComponentPosition({
-                    id: component.id,
-                    position: { x: component.x + dx, y: component.y + dy }
-                }));
-
-                // Recursively update nested containers
-                const componentMetadata = getComponentMetadata(component.type);
-                if (componentMetadata && componentMetadata.isContainer) {
-                    updateAllContainedComponents(component.id, dx, dy);
-                }
-            });
-        };
-
-        // Then update all contained components to move with the container
-        updateAllContainedComponents(containerId, dx, dy);
-
         // Reset highlighted containers
         setDraggedOverContainer(null);
-    }, [canvasComponents, canvasSize, dispatch, organizedComponents.containedComponents, setDraggedOverContainer, setSelectedComponentId, showNotification, findContainerAt, logDragEvent]);
 
-    // Render connections between components
-    const renderConnections = useMemo(() => {
-        return connections.map(conn => {
-            const source = canvasComponents.find(c => c.id === conn.from);
-            const target = canvasComponents.find(c => c.id === conn.to);
+        // *** THE KEY FIX: Correctly handling contained components ***
 
-            if (!source || !target) return null;
+        // This is essential for properly maintaining contained components' positions
+        // when a container is moved
+        setTimeout(() => {
+            // Get updated container (after position update)
+            const updatedContainer = store.getState().components.list.find(c => c.id === containerId);
+            if (!updatedContainer) return;
 
-            return (
-                <ConnectionLine
-                    key={conn.id}
-                    connection={conn}
-                    sourceComponent={source}
-                    targetComponent={target}
-                    isSelected={selectedConnectionId === conn.id}
-                    onClick={() => setSelectedConnectionId(conn.id)}
-                    onDelete={() => {
-                        dispatch(removeConnection(conn.id));
-                        setSelectedConnectionId(null);
-                        showNotification && showNotification('Connection deleted', 'success');
-                    }}
-                />
+            // Find all direct children components
+            const containedComponents = store.getState().components.list.filter(
+                c => c.containerId === containerId
             );
-        });
-    }, [canvasComponents, connections, selectedConnectionId, dispatch, showNotification]);
 
+            // Update each component's position relative to the container's new position
+            containedComponents.forEach(component => {
+                // For nested containers, we need to update their positions and then their children
+                const isNestedContainer = getComponentMetadata(component.type)?.isContainer;
+
+                // Dispatch position update (maintains relative position)
+                dispatch(updateComponentPosition({
+                    id: component.id,
+                    position: {
+                        x: component.x,
+                        y: component.y
+                    },
+                    // Keep the same containerId
+                    containerId: component.containerId
+                }));
+
+                // If this is a nested container, recursively update its contained components
+                if (isNestedContainer) {
+                    // We need to use a timeout to ensure the container position update is processed first
+                    setTimeout(() => {
+                        const nestedContainedComponents = store.getState().components.list.filter(
+                            c => c.containerId === component.id
+                        );
+
+                        nestedContainedComponents.forEach(nestedComponent => {
+                            dispatch(updateComponentPosition({
+                                id: nestedComponent.id,
+                                position: {
+                                    x: nestedComponent.x,
+                                    y: nestedComponent.y
+                                },
+                                // Keep the same containerId
+                                containerId: nestedComponent.containerId
+                            }));
+                        });
+                    }, 0);
+                }
+            });
+        }, 0);
+
+    }, [canvasComponents, canvasSize, dispatch, organizedComponents.containedComponents, showNotification, findContainerAt, logDragEvent]);
+
+    // Render container
     const renderContainer = useCallback((container) => {
         const isSelected = selectedComponentId === container.id;
         const isHighlighted = draggedOverContainer === container.id;
@@ -759,24 +822,54 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification }) => {
                 {/* First render nested containers */}
                 {nestedContainers.map(nestedContainer => renderContainer(nestedContainer))}
 
-                {/* Then render regular components */}
-                {regularComponents.map(component => (
-                    <AwsComponent
-                        key={component.id}
-                        component={component}
-                        isSelected={selectedComponentId === component.id}
-                        isConnectable={isLineMode}
-                        onClick={handleComponentClick}
-                        onDragStart={(e) => handleDragStart(e, component.id)}
-                        onDragMove={(e) => handleDragMove(e, component.id)}
-                        onDragEnd={(e) => handleDragEnd(e, component.id)}
-                    />
-                ))}
+                {/* Then render regular components with CORRECT relative positioning */}
+                {regularComponents.map(component => {
+                    // We don't need to adjust x/y here because the component's stored
+                    // coordinates should already be relative to its container
+                    return (
+                        <AwsComponent
+                            key={component.id}
+                            component={component}
+                            isSelected={selectedComponentId === component.id}
+                            isConnectable={isLineMode}
+                            onClick={handleComponentClick}
+                            onDragStart={(e) => handleDragStart(e, component.id)}
+                            onDragMove={(e) => handleDragMove(e, component.id)}
+                            onDragEnd={(e) => handleDragEnd(e, component.id)}
+                        />
+                    );
+                })}
             </ContainerComponent>
         );
     }, [selectedComponentId, draggedOverContainer, organizedComponents.containedComponents, handleComponentClick, handleDragStart, handleContainerDragMove, handleContainerDragEnd, handleDragMove, handleDragEnd, isLineMode]);
 
-    // 9. Debug helper component
+// Render connections between components
+    const renderConnections = useMemo(() => {
+        return connections.map(conn => {
+            const source = canvasComponents.find(c => c.id === conn.from);
+            const target = canvasComponents.find(c => c.id === conn.to);
+
+            if (!source || !target) return null;
+
+            return (
+                <ConnectionLine
+                    key={conn.id}
+                    connection={conn}
+                    sourceComponent={source}
+                    targetComponent={target}
+                    isSelected={selectedConnectionId === conn.id}
+                    onClick={() => setSelectedConnectionId(conn.id)}
+                    onDelete={() => {
+                        dispatch(removeConnection(conn.id));
+                        setSelectedConnectionId(null);
+                        showNotification && showNotification('Connection deleted', 'success');
+                    }}
+                />
+            );
+        });
+    }, [canvasComponents, connections, selectedConnectionId, dispatch, showNotification]);
+
+    // Debug helper component
     const ContainerDebugger = () => {
         if (!isDebugEnabled) return null;
 

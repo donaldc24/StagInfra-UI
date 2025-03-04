@@ -77,27 +77,17 @@ const componentsSlice = createSlice({
             debouncedSaveComponents(state.list);
         },
         updateComponentPosition: (state, action) => {
-            const { id, position, containerId, delete: shouldDelete } = action.payload;
-
-            if (shouldDelete) {
-                state.list = state.list.filter(comp => comp.id !== id);
-                console.log('Component deleted during position update:', id);
-
-                // Save to localStorage
-                debouncedSaveComponents(state.list);
-                return;
-            }
+            const { id, position, containerId } = action.payload;
 
             const component = state.list.find(comp => comp.id === id);
             if (component) {
-                // Update the position properties
+                // Update position (which is now relative to container if containerId exists)
                 component.x = position.x;
                 component.y = position.y;
 
                 // Only update containerId if it was explicitly provided
                 if (containerId !== undefined) {
-                    // If containerId is null, remove the containment relationship
-                    // If containerId has a value, establish the containment relationship
+                    // Update or remove the container relationship
                     component.containerId = containerId;
                     console.log(`Component ${id} container updated to:`, containerId);
                 }
@@ -109,6 +99,25 @@ const componentsSlice = createSlice({
             } else {
                 console.warn(`updateComponentPosition: Component with ID ${id} not found`);
             }
+        },
+        moveContainerAndContents: (state, action) => {
+            const { containerId, dx, dy } = action.payload;
+
+            // Find the container
+            const container = state.list.find(comp => comp.id === containerId);
+            if (!container) return;
+
+            // Update container position (absolute coordinates)
+            container.x += dx;
+            container.y += dy;
+
+            // No need to update relative positions of contained components
+            // They maintain their relative positions automatically
+
+            console.log(`Container ${containerId} and contents moved by (${dx}, ${dy})`);
+
+            // Save to localStorage
+            debouncedSaveComponents(state.list);
         },
         setDraggingComponent: (state, action) => {
             state.draggingComponent = action.payload;
@@ -136,15 +145,18 @@ const componentsSlice = createSlice({
         moveContainedComponents: (state, action) => {
             const { containerId, dx, dy } = action.payload;
 
+            // This shouldn't be necessary anymore with proper relative positioning
+            // but we'll keep it as a fallback
+
             // Move all components that are in this container
             state.list.forEach(component => {
                 if (component.containerId === containerId) {
-                    component.x += dx;
-                    component.y += dy;
+                    // We don't need to update positions of contained components
+                    // since they're already in relative coordinates
                 }
             });
 
-            console.log(`Moved components in container ${containerId} by (${dx}, ${dy})`);
+            console.log(`Maintained relative positions of components in container ${containerId}`);
 
             // Save to localStorage
             debouncedSaveComponents(state.list);
@@ -159,6 +171,7 @@ export const {
     updateComponentsFromStorage,
     removeComponent,
     updateComponentPosition,
+    moveContainerAndContents,
     setDraggingComponent,
     setGhostLine,
     resizeContainer,
