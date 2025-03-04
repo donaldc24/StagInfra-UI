@@ -5,6 +5,7 @@ import uiStateReducer from './slices/uiStateSlice';
 import costReducer from './slices/costSlice';
 import systemReducer from './slices/systemSlice';
 import componentsReducer from './slices/componentsSlice';
+import storageMiddleware from './middleware/storageMiddleware';
 
 export const store = configureStore({
     reducer: {
@@ -13,5 +14,7 @@ export const store = configureStore({
         uiState: uiStateReducer,
         cost: costReducer,
         system: systemReducer
-    }
+    },
+    middleware: (getDefaultMiddleware) =>
+        getDefaultMiddleware().concat(storageMiddleware)
 });

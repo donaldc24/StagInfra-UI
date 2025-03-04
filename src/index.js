@@ -1,11 +1,15 @@
+// src/index.js
 import React from 'react';
-import { createRoot } from 'react-dom/client';
+import ReactDOM from 'react-dom/client';
 import { Provider } from 'react-redux';
 import { store } from './store';
 import App from './App';
-import './styles/index.css';
+import './styles/utilities.css';
+import './styles/components.css'; // Add CSS for container components
 
-const root = createRoot(document.getElementById('root'));
+// We've removed the line that clears the initialization flag
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
     <React.StrictMode>
         <Provider store={store}>

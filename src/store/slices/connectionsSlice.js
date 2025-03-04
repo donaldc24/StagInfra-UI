@@ -1,5 +1,6 @@
 // src/store/slices/connectionsSlice.js
 import { createSlice } from '@reduxjs/toolkit';
+import { saveConnections, debouncedSaveConnections } from '../../services/utils/storageService';
 
 const connectionsSlice = createSlice({
     name: 'connections',
@@ -31,6 +32,9 @@ const connectionsSlice = createSlice({
             if (!exists) {
                 console.log('Connection added:', id || `${from}-${to}`);
                 state.push(action.payload);
+
+                // Save to localStorage
+                debouncedSaveConnections(state);
             } else {
                 console.log('Connection already exists');
             }
@@ -55,10 +59,17 @@ const connectionsSlice = createSlice({
                 return state;
             }
 
+            // Save to localStorage
+            debouncedSaveConnections(filteredState);
+
             return filteredState;
         },
         clearConnections: (state) => {
             console.log('All connections cleared');
+
+            // Save empty array to localStorage
+            saveConnections([]);
+
             return [];
         },
         // Remove connections when a component is deleted
@@ -69,6 +80,10 @@ const connectionsSlice = createSlice({
             );
 
             console.log('Removed connections for component:', componentId);
+
+            // Save to localStorage
+            debouncedSaveConnections(filteredState);
+
             return filteredState;
         }
     }

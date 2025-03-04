@@ -1,0 +1,80 @@
+/*
+App
+ */
+.App {
+    text-align: center;
+    margin-top: 50px;
+}
+
+h1 {
+    font-size: 24px;
+    color: #000000;
+}
+
+.connected {
+    font-size: 16px;
+    color: #008000;
+}
+
+.not-connected {
+    font-size: 16px;
+    color: #FF0000;
+}
+
+.main-container {
+    display: flex;
+    justify-content: center;
+    margin-top: 20px;
+    position: relative;
+}
+
+
+/*
+Generate Terraform
+ */
+.terraform-button {
+    width: 160px;
+    height: 40px;
+    background-color: #007acc;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    margin: 20px auto;
+    display: block;
+    font-size: 14px;
+    font-weight: bold;
+    transition: background-color 0.3s ease;
+}
+
+.terraform-button:hover {
+    background-color: #005fa3;
+}
+
+.terraform-button:disabled {
+    background-color: #cccccc;
+    cursor: not-allowed;
+}
+
+.terraform-modal .modal-content {
+    width: 600px;
+    max-height: 80vh;
+}
+
+.terraform-modal .code-content {
+    max-height: 50vh;
+    overflow-y: auto;
+    margin: 10px 0;
+    padding: 10px;
+    background-color: #1e293b;
+    color: #e2e8f0;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-family: monospace;
+}
+
+.terraform-modal pre {
+    margin: 0;
+    white-space: pre-wrap;
+    font-size: 14px;
+}
