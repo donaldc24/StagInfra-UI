@@ -79,6 +79,14 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification: propSho
         handleConnectionCancel
     } = useConnectionMode(stageRef, canvasComponents, connections, dispatch, notify);
 
+    // Helper function for drag debugging
+    const updateDragDebug = (message) => {
+        const debugContent = document.getElementById('drag-debug-content');
+        if (debugContent) {
+            debugContent.innerHTML = message;
+        }
+    };
+
     // Memoized canvas size
     const canvasSize = useMemo(() => ({
         width: window.innerWidth - 300, // Adjust based on sidebar width
@@ -94,11 +102,19 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification: propSho
         console.log('- lineStart:', lineStart);
         console.log('- draggingComponent:', draggingComponent);
 
+        // Log available component types
+        try {
+            const { debugComponentRegistry } = require('../../services/hierarchicalAwsComponentRegistry');
+            console.log('Available component types:', debugComponentRegistry());
+        } catch (error) {
+            console.log('Could not log component registry:', error);
+        }
+
         // Add debugging styles to help visualize the overlay
         const style = document.createElement('style');
         style.innerHTML = `
             .component-drop-overlay {
-                pointer-events: all;
+                pointer-events: none;
             }
             
             .component-drop-overlay.debug {
@@ -117,6 +133,21 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification: propSho
                     overlay.classList.toggle('debug');
                     console.log('Debug mode toggled for drop overlay');
                 }
+
+                // Toggle drag debug panel
+                const debugPanel = document.querySelector('.drag-debug-panel');
+                if (debugPanel) {
+                    debugPanel.style.display = debugPanel.style.display === 'none' ? 'block' : 'none';
+                }
+            }
+
+            // Press 'E' to toggle event debugging
+            if (e.key.toLowerCase() === 'e' && e.ctrlKey) {
+                const debugOverlay = document.querySelector('.event-debug-overlay');
+                if (debugOverlay) {
+                    debugOverlay.style.display = debugOverlay.style.display === 'none' ? 'block' : 'none';
+                    console.log('Event debugging toggled:', debugOverlay.style.display);
+                }
             }
         };
 
@@ -127,6 +158,39 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification: propSho
             document.head.removeChild(style);
         };
     }, [canvasComponents.length, connections.length, isLineMode, lineStart, draggingComponent]);
+
+    // Special debugging for event handling issues
+    useEffect(() => {
+        const debugEvent = (e) => {
+            const debugOverlay = document.querySelector('.event-debug-overlay');
+            if (debugOverlay && debugOverlay.style.display === 'block') {
+                debugOverlay.textContent = `Event at (${e.clientX}, ${e.clientY}) on ${e.target.tagName || 'unknown'}`;
+
+                // Create a temporary indicator where the click happened
+                const indicator = document.createElement('div');
+                indicator.style.position = 'absolute';
+                indicator.style.left = `${e.clientX}px`;
+                indicator.style.top = `${e.clientY}px`;
+                indicator.style.width = '10px';
+                indicator.style.height = '10px';
+                indicator.style.borderRadius = '50%';
+                indicator.style.backgroundColor = 'red';
+                indicator.style.zIndex = '9999';
+                document.body.appendChild(indicator);
+
+                // Remove after 1 second
+                setTimeout(() => {
+                    document.body.removeChild(indicator);
+                }, 1000);
+            }
+        };
+
+        document.addEventListener('click', debugEvent);
+
+        return () => {
+            document.removeEventListener('click', debugEvent);
+        };
+    }, []);
 
     // Handle window resize
     useEffect(() => {
@@ -248,24 +312,24 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification: propSho
                 y: e.target.y()
             };
 
+            // Update drag debug panel
+            updateDragDebug(`Moving ${componentId} to ${JSON.stringify(newPosition)}`);
+
+            console.log(`Component ${componentId} moved to:`, newPosition);
+
             // Update component position in Redux
             dispatch(updateComponentPosition({
                 id: componentId,
                 position: newPosition
             }));
 
-            console.log(`Component ${componentId} moved to (${newPosition.x}, ${newPosition.y})`);
-
             // If it's a container, need to update contained components' positions
-            const component = canvasComponents.find(c => c.id === componentId);
-            if (component && (component.type === 'vpc' || component.type === 'subnet')) {
-                // Implementation for updating contained components would go here
-                // This would be needed for hierarchy, but is a complex feature
-            }
+            // (This would be for a more advanced implementation)
         } catch (error) {
             console.error('Error in handleDragMove:', error);
+            updateDragDebug(`Error in drag move: ${error.message}`);
         }
-    }, [dispatch, canvasComponents]);
+    }, [dispatch]);
 
     /**
      * Check if a position is inside a component's boundaries
@@ -404,7 +468,22 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification: propSho
                 return;
             }
 
-            console.log(`Component ${componentId} drag ended at position (${pointerPosition.x}, ${pointerPosition.y})`);
+            // Update drag debug panel
+            updateDragDebug(`Drag ended for ${componentId}`);
+
+            console.log(`Component ${componentId} drag ended at:`, pointerPosition);
+
+            // Final position update to ensure accuracy
+            const finalPosition = {
+                x: e.target.x(),
+                y: e.target.y()
+            };
+
+            // Update component position in Redux one last time
+            dispatch(updateComponentPosition({
+                id: componentId,
+                position: finalPosition
+            }));
 
             // Check if component is dropped in trash area
             // Adjust these values according to your UI layout
@@ -425,6 +504,7 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification: propSho
             }
         } catch (error) {
             console.error('Error in handleDragEnd:', error);
+            updateDragDebug(`Error in drag end: ${error.message}`);
         }
     }, [dispatch, canvasComponents, canvasSize, setSelectedComponent, notify, stageRef, tryPlaceInContainer]);
 
@@ -576,13 +656,16 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification: propSho
                 onClick={handleStageClick}
                 onMouseMove={handleMouseMove}
                 onWheel={handleWheel}
+                listening={true} // Make sure stage listens to events
+                // Important: Store lineStartId attribute for connection handling
+                lineStartId={lineStart?.id}
             >
-                <Layer>
+                <Layer listening={true}> {/* Make sure layer listens to events */}
                     {/* Render canvas grid */}
                     <CanvasGrid width={canvasSize.width} height={canvasSize.height} scale={scale} />
 
                     {/* Render components */}
-                    <Group>
+                    <Group listening={true}> {/* Make sure group listens to events */}
                         {canvasComponents.map(component => (
                             <AwsComponent
                                 key={component.id}
@@ -598,7 +681,7 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification: propSho
                     </Group>
 
                     {/* Render connections */}
-                    <Group>
+                    <Group listening={true}> {/* Make sure group listens to events */}
                         {renderConnections}
 
                         {/* Render ghostLine for active connections */}
@@ -612,41 +695,6 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification: propSho
                 </Layer>
             </Stage>
 
-            {/* Component drop overlay for drag-and-drop */}
-            <div
-                className="component-drop-overlay"
-                style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    zIndex: 10
-                }}
-                onDragOver={(e) => {
-                    e.preventDefault();
-                    e.dataTransfer.dropEffect = 'copy';
-                }}
-                onDrop={(e) => {
-                    e.preventDefault();
-                    const componentType = e.dataTransfer.getData('component-type');
-                    if (!componentType) {
-                        console.warn('No component type found in drop data');
-                        return;
-                    }
-
-                    const stageRect = stageRef.current.container().getBoundingClientRect();
-                    const stage = stageRef.current.getStage();
-
-                    // Calculate position in stage coordinates
-                    const x = (e.clientX - stageRect.left - position.x) / scale;
-                    const y = (e.clientY - stageRect.top - position.y) / scale;
-
-                    console.log(`Dropping component ${componentType} at position (${x}, ${y})`);
-
-                    handleComponentDrop(componentType, { x, y });
-                }}
-            />
 
             {/* Zoom controls */}
             <div className="zoom-controls">
@@ -682,6 +730,47 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification: propSho
             <div className="trash-area">
                 <Trash2 className="trash-icon" size={24} />
                 <span className="trash-text">Drop to Delete</span>
+            </div>
+
+            {/* Drag Debug Overlay - only visible in debug mode */}
+            <div
+                className="drag-debug-panel"
+                style={{
+                    display: 'none', // Set to 'block' to enable
+                    position: 'absolute',
+                    top: 10,
+                    left: 10,
+                    backgroundColor: 'rgba(0,0,0,0.7)',
+                    color: 'white',
+                    padding: '10px',
+                    borderRadius: '4px',
+                    fontSize: '12px',
+                    zIndex: 1000,
+                    maxWidth: '300px'
+                }}
+            >
+                <h4 style={{margin: '0 0 5px 0'}}>Drag Debug Info</h4>
+                <div id="drag-debug-content">No drag events yet</div>
+            </div>
+
+            {/* Event Debugging Overlay */}
+            <div
+                className="event-debug-overlay"
+                style={{
+                    position: 'absolute',
+                    top: 10,
+                    left: 200,
+                    backgroundColor: 'rgba(255, 0, 0, 0.7)',
+                    color: 'white',
+                    padding: '10px',
+                    borderRadius: '4px',
+                    fontSize: '12px',
+                    zIndex: 9999,
+                    pointerEvents: 'none',
+                    display: 'none' // Toggle to 'block' with Ctrl+E
+                }}
+            >
+                Click anywhere to test event handling
             </div>
         </div>
     );

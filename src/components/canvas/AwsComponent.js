@@ -28,7 +28,21 @@ const AwsComponent = ({
         strokeWidth = 2;
     }
 
+    // Helper function for the debug panel
+    const updateDragDebug = (message) => {
+        const debugContent = document.getElementById('drag-debug-content');
+        if (debugContent) {
+            debugContent.innerHTML = message;
+        }
+    };
+
     const handleDragStart = (e) => {
+        console.log('Component drag start:', id, e);
+        updateDragDebug(`Started dragging ${id}`);
+
+        // IMPORTANT: Make sure we prevent default and stop propagation
+        e.cancelBubble = true;
+
         // This is important for allowing drag behavior
         e.target.setAttrs({
             shadowOffset: {
@@ -38,9 +52,39 @@ const AwsComponent = ({
             scaleX: 1.05,
             scaleY: 1.05
         });
+
+        // Directly test if we can modify the component's position via direct manipulation
+        // This is just for testing if the coordinates are applied correctly
+        try {
+            const testX = x + 1;
+            const testY = y + 1;
+            e.target.x(testX);
+            e.target.y(testY);
+            console.log(`Direct position test: component at (${e.target.x()}, ${e.target.y()})`);
+        } catch (err) {
+            console.error('Direct position test failed:', err);
+        }
+    };
+
+    const handleDragMove = (e) => {
+        console.log('Component drag move:', id, 'to:', e.target.x(), e.target.y());
+        updateDragDebug(`Moving ${id} to ${e.target.x()}, ${e.target.y()}`);
+
+        // IMPORTANT: Make sure we prevent default and stop propagation
+        e.cancelBubble = true;
+
+        if (onDragMove) {
+            onDragMove(e, id);
+        }
     };
 
     const handleDragEnd = (e) => {
+        console.log('Component drag end:', id, 'at:', e.target.x(), e.target.y());
+        updateDragDebug(`Finished dragging ${id} at ${e.target.x()}, ${e.target.y()}`);
+
+        // IMPORTANT: Make sure we prevent default and stop propagation
+        e.cancelBubble = true;
+
         // Reset appearance after drag
         e.target.to({
             duration: 0.1,
@@ -65,11 +109,15 @@ const AwsComponent = ({
             width={width}
             height={height}
             draggable={true}
-            onClick={(e) => onClick && onClick(e, component)}
+            onClick={(e) => {
+                console.log(`Clicked component ${id} at (${x}, ${y})`);
+                // IMPORTANT: Make sure we prevent default and stop propagation
+                e.cancelBubble = true;
+                if (onClick) onClick(e, component);
+            }}
             onDragStart={handleDragStart}
-            onDragMove={(e) => onDragMove && onDragMove(e, id)}
+            onDragMove={handleDragMove}
             onDragEnd={handleDragEnd}
-            className="aws-component"
         >
             {/* Main shape */}
             <Rect

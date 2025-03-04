@@ -1,5 +1,4 @@
-// Update src/components/canvas/ContainerComponent.js
-
+// src/components/canvas/ContainerComponent.js
 import React, { useState } from 'react';
 import { Group, Rect, Text } from 'react-konva';
 import { getComponentMetadata } from '../../services/hierarchicalAwsComponentRegistry';
@@ -49,6 +48,7 @@ const ContainerComponent = ({
     };
 
     const handleDragStart = (e) => {
+        console.log('Container drag start:', id);
         // Add visual feedback for dragging
         e.target.setAttrs({
             shadowOffset: {
@@ -58,17 +58,17 @@ const ContainerComponent = ({
             shadowBlur: 10,
             shadowOpacity: 0.2
         });
-
-        console.log(`Started dragging container ${id}`);
     };
 
     const handleDragMove = (e) => {
+        console.log('Container drag move:', id);
         if (onDragMove) {
             onDragMove(e, id);
         }
     };
 
     const handleDragEnd = (e) => {
+        console.log('Container drag end:', id);
         // Reset appearance
         e.target.to({
             duration: 0.1,
@@ -83,22 +83,19 @@ const ContainerComponent = ({
         if (onDragEnd) {
             onDragEnd(e, id);
         }
-
-        console.log(`Finished dragging container ${id}`);
     };
 
     return (
         <Group
             x={x}
             y={y}
+            width={width}
+            height={isCollapsed ? 30 : height}
             draggable={true}
             onClick={(e) => onClick && onClick(e, component)}
             onDragStart={handleDragStart}
             onDragMove={handleDragMove}
             onDragEnd={handleDragEnd}
-            // Important: set the width and height explicitly
-            width={width}
-            height={isCollapsed ? 30 : height}
         >
             {/* Container background */}
             <Rect

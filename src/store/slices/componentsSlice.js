@@ -54,9 +54,12 @@ const componentsSlice = createSlice({
 
             const component = state.list.find(comp => comp.id === id);
             if (component) {
+                // Update the position properties directly
                 component.x = position.x;
                 component.y = position.y;
-                // Don't log every position update to avoid console spam
+                console.log(`Component ${id} position updated to (${position.x}, ${position.y})`);
+            } else {
+                console.warn(`updateComponentPosition: Component with ID ${id} not found`);
             }
         },
         setDraggingComponent: (state, action) => {
