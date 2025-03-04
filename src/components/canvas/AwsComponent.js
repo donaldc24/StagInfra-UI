@@ -37,32 +37,39 @@ const AwsComponent = ({
     };
 
     const handleDragStart = (e) => {
-        console.log('Component drag start:', id, e);
-        updateDragDebug(`Started dragging ${id}`);
+        console.log('Component drag start:', id);
 
-        // IMPORTANT: Make sure we prevent default and stop propagation
-        e.cancelBubble = true;
+        // Store the original position
+        e.target.originalX = x;
+        e.target.originalY = y;
 
-        // This is important for allowing drag behavior
-        e.target.setAttrs({
-            shadowOffset: {
-                x: 5,
-                y: 5
-            },
+        // Add visual feedback
+        e.target.to({
+            duration: 0.1,
+            shadowBlur: 10,
             scaleX: 1.05,
-            scaleY: 1.05
+            scaleY: 1.05,
+        });
+    };
+
+    const handleDragEnd = (e) => {
+        console.log('Component drag end:', id);
+
+        // Reset appearance
+        e.target.to({
+            duration: 0.1,
+            shadowBlur: 0,
+            scaleX: 1,
+            scaleY: 1,
         });
 
-        // Directly test if we can modify the component's position via direct manipulation
-        // This is just for testing if the coordinates are applied correctly
-        try {
-            const testX = x + 1;
-            const testY = y + 1;
-            e.target.x(testX);
-            e.target.y(testY);
-            console.log(`Direct position test: component at (${e.target.x()}, ${e.target.y()})`);
-        } catch (err) {
-            console.error('Direct position test failed:', err);
+        // Calculate the new position
+        const newX = e.target.x();
+        const newY = e.target.y();
+
+        // Directly update the position
+        if (onDragEnd) {
+            onDragEnd(e, id, { x: newX, y: newY });
         }
     };
 
@@ -75,30 +82,6 @@ const AwsComponent = ({
 
         if (onDragMove) {
             onDragMove(e, id);
-        }
-    };
-
-    const handleDragEnd = (e) => {
-        console.log('Component drag end:', id, 'at:', e.target.x(), e.target.y());
-        updateDragDebug(`Finished dragging ${id} at ${e.target.x()}, ${e.target.y()}`);
-
-        // IMPORTANT: Make sure we prevent default and stop propagation
-        e.cancelBubble = true;
-
-        // Reset appearance after drag
-        e.target.to({
-            duration: 0.1,
-            shadowOffset: {
-                x: 0,
-                y: 0
-            },
-            scaleX: 1,
-            scaleY: 1
-        });
-
-        // Call the external handler
-        if (onDragEnd) {
-            onDragEnd(e, id);
         }
     };
 
@@ -139,20 +122,20 @@ const AwsComponent = ({
                 fontSize={16}
                 fontStyle="bold"
                 fill="white"
-                width={width}
-                height={height}
                 align="center"
                 verticalAlign="middle"
+                width={width}
+                height={height}
             />
 
-            {/* Component name */}
+            // For the component name below, either remove it or use:
             <Text
                 y={height + 5}
-                width={width}
                 text={name || metadata.displayName || type}
                 fontSize={12}
                 fill="#374151"
                 align="center"
+                width={width}
             />
 
             {/* Connection indicator dot */}

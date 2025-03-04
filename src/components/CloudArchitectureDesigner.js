@@ -1,3 +1,4 @@
+// src/components/CloudArchitectureDesigner.js
 import React, { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import OptimizedCanvasContainer from './canvas/OptimizedCanvasContainer';
@@ -5,11 +6,39 @@ import { FileCode } from 'lucide-react';
 
 // Import actions
 import { setLineMode } from '../store/slices/uiStateSlice';
-import { updateComponent, removeComponent } from '../store/slices/componentsSlice';
+import { addComponent, updateComponent, removeComponent } from '../store/slices/componentsSlice';
 import { removeComponentConnections } from '../store/slices/connectionsSlice';
 
 // Import hooks
 import useNotification from '../hooks/useNotification';
+
+// Import utilities
+import { getComponentMetadata, getDefaultProperties } from '../services/hierarchicalAwsComponentRegistry';
+
+// Debug overlay component
+const DebugOverlay = ({ enabled }) => {
+    if (!enabled) return null;
+
+    return (
+        <div
+            style={{
+                position: 'absolute',
+                top: 10,
+                left: 10,
+                background: 'rgba(0,0,0,0.7)',
+                color: 'white',
+                padding: 10,
+                zIndex: 9999,
+                maxWidth: 300,
+                fontSize: 12
+            }}
+        >
+            <h4 style={{ margin: '0 0 5px 0' }}>Component Debug</h4>
+            <div id="component-debug"></div>
+            <div id="drag-events"></div>
+        </div>
+    );
+};
 
 // Main application component
 const CloudArchitectureDesigner = () => {
@@ -25,6 +54,11 @@ const CloudArchitectureDesigner = () => {
     const [activeTab, setActiveTab] = useState('add');
     const [isPropertyPanelOpen, setIsPropertyPanelOpen] = useState(true);
     const [selectedComponent, setSelectedComponent] = useState(null);
+    const [isDebugEnabled, setIsDebugEnabled] = useState(false);
+    const [canvasSize, setCanvasSize] = useState({
+        width: window.innerWidth - 300, // Adjust based on sidebar width
+        height: window.innerHeight - 60 // Adjust based on header height
+    });
 
     // Get notifications service
     const { notifications, showNotification } = useNotification();
@@ -47,10 +81,30 @@ const CloudArchitectureDesigner = () => {
             }
         };
 
+        // Listen for resize events to update canvas size
+        const handleResize = () => {
+            setCanvasSize({
+                width: window.innerWidth - 300,
+                height: window.innerHeight - 60
+            });
+        };
+
+        // Listen for keyboard events for debugging
+        const handleKeyDown = (e) => {
+            if (e.key === 'd' && e.ctrlKey) {
+                setIsDebugEnabled(prev => !prev);
+                console.log('Debug mode toggled');
+            }
+        };
+
         window.addEventListener('component-selected', handleComponentSelectionEvent);
+        window.addEventListener('resize', handleResize);
+        window.addEventListener('keydown', handleKeyDown);
 
         return () => {
             window.removeEventListener('component-selected', handleComponentSelectionEvent);
+            window.removeEventListener('resize', handleResize);
+            window.removeEventListener('keydown', handleKeyDown);
         };
     }, []);
 
@@ -89,12 +143,86 @@ const CloudArchitectureDesigner = () => {
 
     const generateTerraformCode = () => {
         // This would be implemented to call your terraform generation service
-        // const code = generateTerraform(components, connections);
         showNotification("Terraform code generated successfully!", "success");
+    };
+
+    const handleComponentDrop = (e) => {
+        e.preventDefault();
+
+        // Get the component type from dataTransfer
+        const componentType = e.dataTransfer.getData('component-type');
+        if (!componentType) {
+            console.error('No component type in drop data');
+            return;
+        }
+
+        // Get drop position relative to canvas
+        const canvasRect = e.currentTarget.getBoundingClientRect();
+        const x = e.clientX - canvasRect.left;
+        const y = e.clientY - canvasRect.top;
+
+        // Create and add the new component
+        createNewComponent(componentType, x, y);
+    };
+
+    const handleAddComponentClick = (componentType) => {
+        // Default center position
+        const x = canvasSize.width / 2 - 20;
+        const y = canvasSize.height / 2 - 20;
+
+        createNewComponent(componentType, x, y);
+    };
+
+    const createNewComponent = (componentType, x, y) => {
+        // Validate component type
+        if (!componentType || !getComponentMetadata(componentType)) {
+            console.warn('Invalid component type:', componentType);
+            return;
+        }
+
+        // Get component metadata
+        const metadata = getComponentMetadata(componentType);
+        const defaultProps = getDefaultProperties(componentType);
+
+        // Set component size based on type
+        let width = 40;
+        let height = 40;
+
+        if (componentType === 'vpc') {
+            width = 300;
+            height = 250;
+        } else if (componentType === 'subnet') {
+            width = 200;
+            height = 150;
+        }
+
+        // Create new component
+        const newComponent = {
+            id: `${componentType}-${Date.now()}`,
+            type: componentType,
+            x: x,
+            y: y,
+            width: width,
+            height: height,
+            ...defaultProps
+        };
+
+        // Add to Redux store
+        dispatch(addComponent(newComponent));
+        setSelectedComponent(newComponent);
+        showNotification(`Added new ${metadata.displayName || componentType}`, 'success');
+
+        if (isDebugEnabled) {
+            document.getElementById('component-debug').innerText =
+                `Added: ${componentType} at (${x}, ${y})`;
+        }
     };
 
     return (
         <div className="app-container">
+            {/* Debug Overlay */}
+            <DebugOverlay enabled={isDebugEnabled} />
+
             {/* Header */}
             <header className="app-header">
                 <h1 className="app-title">Cloud Architecture Designer</h1>
@@ -155,20 +283,15 @@ const CloudArchitectureDesigner = () => {
                                                         key={item}
                                                         className="component-item"
                                                         draggable="true"
-                                                        data-component-type={item} // Store type as a data attribute
+                                                        data-component-type={item}
                                                         onDragStart={(e) => {
-                                                            // Set a global variable as a fallback
-                                                            window.__lastDraggedComponentType = item;
-
-                                                            // Store the component type in dataTransfer
                                                             console.log(`Started dragging component: ${item}`);
+
+                                                            // Set both text/plain and application-specific data
                                                             e.dataTransfer.setData('text/plain', item);
                                                             e.dataTransfer.setData('component-type', item);
 
-                                                            // Log what we're setting to confirm
-                                                            console.log('Setting component-type to:', item);
-
-                                                            // Create a visual drag image (optional)
+                                                            // Create a custom drag image (optional)
                                                             const dragImage = document.createElement('div');
                                                             dragImage.textContent = item.toUpperCase();
                                                             dragImage.style.backgroundColor = iconClass === 'icon-compute' ? '#f97316' :
@@ -181,13 +304,15 @@ const CloudArchitectureDesigner = () => {
                                                             dragImage.style.top = '-1000px';
                                                             document.body.appendChild(dragImage);
 
+                                                            // Set the drag image
                                                             e.dataTransfer.setDragImage(dragImage, 15, 15);
 
-                                                            // Clean up the drag image element after drag operation
+                                                            // Clean up
                                                             setTimeout(() => {
                                                                 document.body.removeChild(dragImage);
                                                             }, 0);
                                                         }}
+                                                        onClick={() => handleAddComponentClick(item)}
                                                     >
                                                         <div className={`component-icon-container ${iconClass}`}>
                                                             {item.substring(0, 2).toUpperCase()}
@@ -311,6 +436,26 @@ const CloudArchitectureDesigner = () => {
                                     Clear All Connections
                                 </button>
 
+                                <button
+                                    style={{
+                                        padding: '0.625rem 1rem',
+                                        borderRadius: '0.375rem',
+                                        fontWeight: 500,
+                                        fontSize: '0.875rem',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        gap: '0.5rem',
+                                        cursor: 'pointer',
+                                        backgroundColor: isDebugEnabled ? '#fef3c7' : '#f3f4f6',
+                                        color: isDebugEnabled ? '#92400e' : '#4b5563',
+                                        border: isDebugEnabled ? '1px solid #fde68a' : '1px solid #d1d5db',
+                                    }}
+                                    onClick={() => setIsDebugEnabled(!isDebugEnabled)}
+                                >
+                                    {isDebugEnabled ? 'Disable Debug Mode' : 'Enable Debug Mode'}
+                                </button>
+
                                 <div style={{
                                     backgroundColor: '#dbeafe',
                                     border: '1px solid #bfdbfe',
@@ -334,7 +479,11 @@ const CloudArchitectureDesigner = () => {
                 </div>
 
                 {/* Center canvas area */}
-                <div className="canvas-area">
+                <div
+                    className="canvas-area"
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={handleComponentDrop}
+                >
                     {/* Render the optimized canvas container */}
                     <OptimizedCanvasContainer
                         onComponentSelect={handleComponentSelect}
@@ -414,6 +563,17 @@ const CloudArchitectureDesigner = () => {
                                                 placeholder={`${selectedComponent.type.toUpperCase()}-${selectedComponent.id.slice(-4)}`}
                                             />
                                         </div>
+
+                                        {/* Display position information (for debugging) */}
+                                        {isDebugEnabled && (
+                                            <div className="form-group">
+                                                <label className="form-label">Position</label>
+                                                <div style={{ fontSize: '0.875rem', color: '#6b7280' }}>
+                                                    X: {selectedComponent.x.toFixed(0)}, Y: {selectedComponent.y.toFixed(0)}
+                                                </div>
+                                            </div>
+                                        )}
+
                                         {/* Render component-specific property editors */}
                                         {selectedComponent.type === 'ec2' && (
                                             <>
@@ -548,7 +708,6 @@ const CloudArchitectureDesigner = () => {
                                         )}
                                     </div>
                                 </div>
-
                                 <div className="panel-footer">
                                     <button
                                         className="btn-danger"
@@ -593,6 +752,20 @@ const CloudArchitectureDesigner = () => {
                     </div>
                 ))}
             </div>
+
+            {/* Invisible drop area for component dragging */}
+            <div
+                id="drop-overlay"
+                style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    height: '100%',
+                    pointerEvents: 'none',
+                    zIndex: -1
+                }}
+            />
         </div>
     );
 };

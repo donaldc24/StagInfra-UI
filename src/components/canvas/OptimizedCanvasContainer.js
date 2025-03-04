@@ -300,6 +300,9 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification: propSho
      * @param {string} componentId - ID of the component being dragged
      */
     const handleDragMove = useCallback((e, componentId) => {
+        console.log('DRAG MOVE EVENT:', e);
+        console.log('Component position during drag:', e.target.x(), e.target.y());
+
         if (!componentId) {
             console.warn('No component ID provided to drag handler');
             return;
@@ -656,42 +659,34 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification: propSho
                 onClick={handleStageClick}
                 onMouseMove={handleMouseMove}
                 onWheel={handleWheel}
-                listening={true} // Make sure stage listens to events
-                // Important: Store lineStartId attribute for connection handling
-                lineStartId={lineStart?.id}
             >
-                <Layer listening={true}> {/* Make sure layer listens to events */}
-                    {/* Render canvas grid */}
+                <Layer>
                     <CanvasGrid width={canvasSize.width} height={canvasSize.height} scale={scale} />
 
-                    {/* Render components */}
-                    <Group listening={true}> {/* Make sure group listens to events */}
-                        {canvasComponents.map(component => (
-                            <AwsComponent
-                                key={component.id}
-                                component={component}
-                                isSelected={selectedComponent?.id === component.id}
-                                isConnectable={isLineMode}
-                                isValidTarget={isLineMode && lineStart && lineStart.id !== component.id}
-                                onClick={(e) => handleComponentClick(e, component)}
-                                onDragMove={(e) => handleDragMove(e, component.id)}
-                                onDragEnd={(e) => handleDragEnd(e, component.id)}
-                            />
-                        ))}
-                    </Group>
+                    {/* Render components first */}
+                    {canvasComponents.map(component => (
+                        <AwsComponent
+                            key={component.id}
+                            component={component}
+                            isSelected={selectedComponent?.id === component.id}
+                            isConnectable={isLineMode}
+                            isValidTarget={isLineMode && lineStart && lineStart.id !== component.id}
+                            onClick={handleComponentClick}
+                            onDragMove={handleDragMove}
+                            onDragEnd={handleDragEnd}
+                        />
+                    ))}
 
-                    {/* Render connections */}
-                    <Group listening={true}> {/* Make sure group listens to events */}
-                        {renderConnections}
+                    {/* Then render connections */}
+                    {renderConnections}
 
-                        {/* Render ghostLine for active connections */}
-                        {ghostLine && (
-                            <ConnectionLine
-                                isGhost={true}
-                                points={ghostLine.points}
-                            />
-                        )}
-                    </Group>
+                    {/* Render ghost line */}
+                    {ghostLine && (
+                        <ConnectionLine
+                            isGhost={true}
+                            points={ghostLine.points}
+                        />
+                    )}
                 </Layer>
             </Stage>
 
