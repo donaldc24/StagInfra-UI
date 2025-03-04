@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { FileCode } from 'lucide-react';
+import { store } from '../store';
 
 // Import components
 import OptimizedCanvasContainer from './canvas/OptimizedCanvasContainer';
@@ -113,6 +114,10 @@ const CloudArchitectureDesigner = () => {
             }
         };
 
+        // Expose getState and getComponentMetadata for use in property panel
+        window.getState = store.getState;
+        window.getComponentMetadata = getComponentMetadata;
+
         window.addEventListener('component-selected', handleComponentSelectionEvent);
         window.addEventListener('resize', handleResize);
         window.addEventListener('keydown', handleKeyDown);
@@ -121,6 +126,9 @@ const CloudArchitectureDesigner = () => {
             window.removeEventListener('component-selected', handleComponentSelectionEvent);
             window.removeEventListener('resize', handleResize);
             window.removeEventListener('keydown', handleKeyDown);
+            // Clean up window globals
+            delete window.getState;
+            delete window.getComponentMetadata;
         };
     }, []);
 

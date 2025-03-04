@@ -19,7 +19,7 @@ export const awsComponentRegistry = {
  * @param {string} type - The component type
  * @returns {Object|null} - Component metadata or null if not found
  */
-export const getComponentMetadata = (type) => {
+export let getComponentMetadata = (type) => {
     return awsComponentRegistry[type] || null;
 };
 

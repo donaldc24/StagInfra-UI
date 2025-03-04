@@ -1,4 +1,4 @@
-// src/components/PropertyPanel.js
+// src/components/sidebar/PropertyPanel.js
 import React, { useState, useEffect, memo } from 'react';
 import PropertyEditor from '../properties/PropertyEditor';
 
@@ -61,6 +61,109 @@ const PropertyPanel = memo(({
                 {component.type.toUpperCase()}
               </span>
                         </div>
+
+                        {/* Show container information if component is in a container */}
+                        {component.containerId && (
+                            <div className="form-group">
+                                <label className="form-label">Container</label>
+                                <div className="container-info">
+                                    {(() => {
+                                        // Find the container component
+                                        const containerComponent = window.getState?.().components.list.find(
+                                            c => c.id === component.containerId
+                                        );
+                                        if (containerComponent) {
+                                            return (
+                                                <div style={{
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: '0.5rem',
+                                                    padding: '0.5rem',
+                                                    backgroundColor: '#f3f4f6',
+                                                    borderRadius: '0.375rem',
+                                                    fontSize: '0.875rem'
+                                                }}>
+                                                    <div style={{
+                                                        width: '0.75rem',
+                                                        height: '0.75rem',
+                                                        borderRadius: '9999px',
+                                                        backgroundColor: containerComponent.type === 'vpc' ? '#7c3aed' : '#6366f1'
+                                                    }}></div>
+                                                    <span>
+                                                        {containerComponent.name || `${containerComponent.type.toUpperCase()}-${containerComponent.id.slice(-4)}`}
+                                                    </span>
+                                                </div>
+                                            );
+                                        }
+                                        return <span style={{ color: '#6b7280' }}>Unknown container</span>;
+                                    })()}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Show contained components if this is a container */}
+                        {(() => {
+                            const metadata = window.getComponentMetadata?.(component.type) || {};
+                            if (metadata.isContainer) {
+                                // Find components contained in this container
+                                const containedComponents = window.getState?.().components.list.filter(
+                                    c => c.containerId === component.id
+                                ) || [];
+
+                                if (containedComponents.length > 0) {
+                                    return (
+                                        <div className="form-group">
+                                            <label className="form-label">Contained Components ({containedComponents.length})</label>
+                                            <div className="contained-components-list">
+                                                {containedComponents.map(c => (
+                                                    <div key={c.id} style={{
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        gap: '0.5rem',
+                                                        padding: '0.5rem',
+                                                        marginBottom: '0.25rem',
+                                                        backgroundColor: '#f3f4f6',
+                                                        borderRadius: '0.375rem',
+                                                        fontSize: '0.875rem'
+                                                    }}>
+                                                        <div style={{
+                                                            width: '0.75rem',
+                                                            height: '0.75rem',
+                                                            borderRadius: '9999px',
+                                                            backgroundColor: c.type === 'ec2' ? '#f97316' :
+                                                                c.type === 's3' ? '#16a34a' :
+                                                                    c.type === 'vpc' ? '#7c3aed' :
+                                                                        c.type === 'subnet' ? '#6366f1' :
+                                                                            '#6b7280'
+                                                        }}></div>
+                                                        <span>
+                                                            {c.name || `${c.type.toUpperCase()}-${c.id.slice(-4)}`}
+                                                        </span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    );
+                                }
+                                return (
+                                    <div className="form-group">
+                                        <label className="form-label">Contained Components</label>
+                                        <div style={{
+                                            padding: '0.5rem',
+                                            color: '#6b7280',
+                                            fontStyle: 'italic',
+                                            backgroundColor: '#f9fafb',
+                                            borderRadius: '0.375rem',
+                                            fontSize: '0.875rem',
+                                            textAlign: 'center'
+                                        }}>
+                                            No components inside
+                                        </div>
+                                    </div>
+                                );
+                            }
+                            return null;
+                        })()}
 
                         {/* Use PropertyEditor component */}
                         <PropertyEditor
