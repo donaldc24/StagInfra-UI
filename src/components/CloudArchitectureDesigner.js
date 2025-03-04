@@ -1,5 +1,5 @@
 // src/components/CloudArchitectureDesigner.js
-import React, { useState, useEffect, useRef } from 'react';
+import React, {useState, useEffect, useRef, useCallback} from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import OptimizedCanvasContainer from './canvas/OptimizedCanvasContainer';
 import { FileCode } from 'lucide-react';
@@ -7,7 +7,8 @@ import { FileCode } from 'lucide-react';
 // Import actions
 import { setLineMode } from '../store/slices/uiStateSlice';
 import { addComponent, updateComponent, removeComponent } from '../store/slices/componentsSlice';
-import { removeComponentConnections } from '../store/slices/connectionsSlice';
+import { removeComponentConnections, clearConnections } from '../store/slices/connectionsSlice';
+
 
 // Import hooks
 import useNotification from '../hooks/useNotification';
@@ -45,6 +46,7 @@ const DebugOverlay = ({ enabled }) => {
 const CloudArchitectureDesigner = () => {
     const dispatch = useDispatch();
     const canvasRef = useRef(null);
+    const [selectedConnectionId, setSelectedConnectionId] = useState(null);
 
     // Redux state
     const backendStatus = useSelector(state => state.system?.backendStatus || 'disconnected');
@@ -79,6 +81,17 @@ const CloudArchitectureDesigner = () => {
         database: ['rds', 'dynamodb'],
         networking: ['vpc', 'subnet', 'securityGroup', 'loadBalancer']
     };
+
+    const handleClearAllConnections = useCallback(() => {
+        // Dispatch an action to clear all connections
+        dispatch(clearConnections());
+
+        // Optional: Reset any connection-related UI state
+        setSelectedConnectionId(null);
+
+        // Show a notification
+        showNotification('All connections cleared', 'success');
+    }, [dispatch, showNotification]);
 
     // Effects
     useEffect(() => {
@@ -251,6 +264,7 @@ const CloudArchitectureDesigner = () => {
                 `Added: ${componentType} at (${x}, ${y})`;
         }
     };
+
 
     // Render Terraform code modal
     const renderTerraformModal = () => {
@@ -495,10 +509,7 @@ const CloudArchitectureDesigner = () => {
                                         color: '#b91c1c',
                                         border: '1px solid #fecaca',
                                     }}
-                                    onClick={() => {
-                                        // Implement clear connections functionality
-                                        showNotification('All connections cleared', 'success');
-                                    }}
+                                    onClick={handleClearAllConnections}
                                 >
                                     Clear All Connections
                                 </button>
