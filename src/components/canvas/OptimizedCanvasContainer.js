@@ -3,6 +3,7 @@ import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import { Stage, Layer } from 'react-konva';
 import { useDispatch, useSelector } from 'react-redux';
 import { ZoomIn, ZoomOut, Move, X, Layers, Trash2 } from 'lucide-react';
+import { debounce } from 'lodash';
 
 // Import custom hook
 import useConnectionMode from '../../hooks/useConnectionMode';
@@ -250,6 +251,7 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification }) => {
         setDraggedOverContainer(container ? container.id : null);
     }, [isDragging, canvasComponents, findContainerAt]);
 
+// In OptimizedCanvasContainer.js
     const handleDragEnd = useCallback((e, componentId) => {
         setIsDragging(false);
         const component = canvasComponents.find(c => c.id === componentId);
@@ -259,9 +261,26 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification }) => {
         const newX = e.target.x();
         const newY = e.target.y();
 
-        console.log(`Component ${componentId} dragged to:`, { x: newX, y: newY });
+        // Check if dropped in trash area
+        const stage = stageRef.current.getStage();
+        const pointerPosition = stage.getPointerPosition();
 
-        // Check if we dropped on a container
+        // Define trash area bounds (top right corner)
+        const inTrashArea = (
+            pointerPosition.x > (canvasSize.width - 150) &&
+            pointerPosition.y < 150
+        );
+
+        // If in trash area, prioritize deletion
+        if (inTrashArea) {
+            dispatch(removeComponent(componentId));
+            dispatch(removeComponentConnections(componentId));
+            setSelectedComponentId(null);
+            showNotification && showNotification('Component deleted', 'success');
+            return; // Exit early to prevent further processing
+        }
+
+        // Rest of the existing drag end logic...
         const containerData = {};
 
         // Skip container check if this is a container itself
@@ -272,8 +291,8 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification }) => {
                 containerData.containerId = container.id;
                 console.log(`Component ${componentId} dropped in container ${container.id}`);
 
-                // Show notification
-                showNotification && showNotification(
+                // Use regular showNotification for container placement
+                showNotification(
                     `Placed ${component.type.toUpperCase()} in ${container.type.toUpperCase()}`,
                     'success'
                 );
@@ -293,30 +312,17 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification }) => {
             ...containerData
         }));
 
-        // Show notification
-        showNotification && showNotification(
+        // Use regular showNotification for movement
+        showNotification(
             `${component.type.toUpperCase()} component moved`,
             'info'
         );
-
-        // Check if dropped in trash area
-        const stage = stageRef.current.getStage();
-        const stageRect = stage.container().getBoundingClientRect();
-        const pointerPosition = stage.getPointerPosition();
-
-        // Define trash area bounds (top right corner)
-        const inTrashArea = (
-            pointerPosition.x > (canvasSize.width - 150) &&
-            pointerPosition.y < 150
-        );
-
-        if (inTrashArea) {
-            dispatch(removeComponent(componentId));
-            dispatch(removeComponentConnections(componentId));
-            setSelectedComponentId(null);
-            showNotification && showNotification('Component deleted', 'success');
-        }
     }, [dispatch, canvasComponents, canvasSize, showNotification, findContainerAt]);
+
+// Create a debounced version of showNotification outside of the component
+    const debouncedShowNotification = debounce((message, type) => {
+        showNotification(message, type);
+    }, 500); // 500ms delay between notifications
 
     // Handler when a container is dragged
     const handleContainerDragMove = useCallback((e, containerId) => {
@@ -400,7 +406,12 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification }) => {
             setSelectedComponentId(null);
             showNotification && showNotification('Container and its contents deleted', 'success');
         }
-    }, [dispatch, canvasComponents, canvasSize, showNotification, organizedComponents.containedComponents]);
+
+        debouncedShowNotification(
+            `${container.type.toUpperCase()} container moved`,
+            'info'
+        );
+    }, [canvasComponents, dispatch, organizedComponents.containedComponents, showNotification, canvasSize.width, debouncedShowNotification]);
 
     // Render connections between components
     const renderConnections = useMemo(() => {
