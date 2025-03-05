@@ -357,3 +357,20 @@
 .forgot-password:hover {
     text-decoration: underline;
 }
+
+.secondary-button {
+    margin-top: 1rem;
+    padding: 0.75rem;
+    background-color: #f3f4f6;
+    color: #4b5563;
+    border: 1px solid #d1d5db;
+    border-radius: 0.375rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.secondary-button:hover {
+    background-color: #e5e7eb;
+}

@@ -29,43 +29,71 @@ const EmailVerification = () => {
             }
 
             try {
-                // Use a flag to make sure we only verify once
-                let isMounted = true;
+                // Adding a small delay before verification to ensure backend is ready
+                await new Promise(resolve => setTimeout(resolve, 500));
 
                 const response = await authService.verifyEmail(token);
 
-                // Only update state if component is still mounted
-                if (isMounted) {
-                    if (response.success) {
-                        setVerificationState({
-                            isLoading: false,
-                            isSuccess: true,
-                            error: null
-                        });
-                    } else {
-                        setVerificationState({
-                            isLoading: false,
-                            isSuccess: false,
-                            error: response.message || 'Email verification failed'
-                        });
-                    }
+                if (response.success) {
+                    setVerificationState({
+                        isLoading: false,
+                        isSuccess: true,
+                        error: null
+                    });
+                } else {
+                    setVerificationState({
+                        isLoading: false,
+                        isSuccess: false,
+                        error: response.message || 'Email verification failed'
+                    });
                 }
-
-                // Cleanup function to prevent state updates if component unmounts
-                return () => {
-                    isMounted = false;
-                };
             } catch (error) {
                 setVerificationState({
                     isLoading: false,
                     isSuccess: false,
-                    error: error.response?.data?.message || 'An error occurred during verification'
+                    error: error.message || 'An error occurred during verification'
                 });
             }
         };
 
         verifyEmail();
     }, [location.search]);
+
+    // Handle manual verification (when user needs to click again)
+    const handleManualVerify = async () => {
+        setVerificationState({
+            isLoading: true,
+            isSuccess: false,
+            error: null
+        });
+
+        const queryParams = new URLSearchParams(location.search);
+        const token = queryParams.get('token');
+
+        try {
+            const response = await authService.verifyEmail(token);
+
+            if (response.success) {
+                setVerificationState({
+                    isLoading: false,
+                    isSuccess: true,
+                    error: null
+                });
+            } else {
+                setVerificationState({
+                    isLoading: false,
+                    isSuccess: false,
+                    error: response.message || 'Email verification failed'
+                });
+            }
+        } catch (error) {
+            setVerificationState({
+                isLoading: false,
+                isSuccess: false,
+                error: error.message || 'An error occurred during verification'
+            });
+        }
+    };
 
     // Redirect to login after successful verification
     const handleContinue = () => {
@@ -113,7 +141,7 @@ const EmailVerification = () => {
         );
     }
 
-    // Render error state
+    // Render error state with retry button
     return (
         <div className="auth-container">
             <div className="auth-form-container">
@@ -124,20 +152,20 @@ const EmailVerification = () => {
                     </svg>
                 </div>
 
-                <h2>Verification Failed</h2>
+                <h2>Verification Issue</h2>
 
                 <div className="error-message verification-error">
                     <p>{verificationState.error}</p>
-                    <p>This may be because:</p>
-                    <ul>
-                        <li>The verification link has expired</li>
-                        <li>The verification link has already been used</li>
-                        <li>The verification token is invalid</li>
-                    </ul>
                 </div>
 
                 <div className="verification-actions">
-                    <button onClick={() => navigate('/login')} className="auth-button">
+                    <button onClick={handleManualVerify} className="auth-button">
+                        Try Again
+                    </button>
+                </div>
+
+                <div className="navigation-links">
+                    <button onClick={() => navigate('/login')} className="secondary-button">
                         Go to Login
                     </button>
                 </div>

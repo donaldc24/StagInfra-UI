@@ -6,17 +6,26 @@ const processResponse = (response) => {
     return response.data;
 };
 
+const verificationRequests = {};
+
 // Handle errors consistently
 const handleError = (error) => {
+    console.log("Handling error:", error);
+
     // If the error has a response from the server
     if (error.response) {
-        return error.response.data;
+        console.log("Server responded with error:", error.response.status, error.response.data);
+        return error.response.data || {
+            success: false,
+            message: `Server error: ${error.response.status}`
+        };
     }
 
     // Network errors or other issues
+    console.log("Network or other error:", error.message);
     return {
         success: false,
-        message: 'Network error, please check your connection'
+        message: error.message || 'Network error, please check your connection'
     };
 };
 
@@ -34,12 +43,34 @@ export const authService = {
 
     // Verify email with token
     verifyEmail: async (token) => {
-        try {
-            const response = await httpClient.get(`/auth/verify?token=${token}`);
-            return processResponse(response);
-        } catch (error) {
-            return handleError(error);
+        // Prevent duplicate requests
+        if (verificationRequests[token]) {
+            console.log("Returning cached verification request for token:", token);
+            return verificationRequests[token];
         }
+
+        // Create a promise for this request
+        const requestPromise = new Promise(async (resolve) => {
+            try {
+                console.log("authService: Calling verify endpoint with token:", token);
+                const response = await httpClient.get(`/auth/verify?token=${token}`);
+                console.log("authService: Verification response:", response.data);
+                resolve(processResponse(response));
+            } catch (error) {
+                console.error('Email verification error details:', error.response || error);
+                resolve(handleError(error));
+            }
+        });
+
+        // Store this promise for deduplication
+        verificationRequests[token] = requestPromise;
+
+        // Clear from cache after 5 seconds
+        setTimeout(() => {
+            delete verificationRequests[token];
+        }, 5000);
+
+        return requestPromise;
     },
 
     // Resend verification email

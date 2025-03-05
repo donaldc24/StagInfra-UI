@@ -32,6 +32,8 @@ httpClient.interceptors.response.use(
         return response;
     },
     (error) => {
+        console.log("HTTP Client Error:", error);
+
         // Handle 401 Unauthorized errors
         if (error.response?.status === 401) {
             console.log('Unauthorized request, logging out...');
@@ -39,19 +41,15 @@ httpClient.interceptors.response.use(
             window.location.href = '/login';
         }
 
-        // Handle 403 Forbidden errors
-        if (error.response?.status === 403) {
-            console.log('Forbidden resource, insufficient permissions');
-        }
-
-        // Handle 429 Too Many Requests
-        if (error.response?.status === 429) {
-            console.log('Rate limit exceeded, please try again later');
-        }
-
-        // Handle 5xx Server Errors
-        if (error.response?.status >= 500) {
-            console.log('Server error, please try again later');
+        // For verification endpoints, convert errors to responses
+        if (error.config?.url?.includes('/auth/verify')) {
+            console.log('Handling verification error specially');
+            return {
+                data: {
+                    success: false,
+                    message: error.response?.data?.message || 'Verification failed'
+                }
+            };
         }
 
         return Promise.reject(error);
