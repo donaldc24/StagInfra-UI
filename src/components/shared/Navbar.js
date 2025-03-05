@@ -24,6 +24,9 @@ const Navbar = () => {
             <div className="nav-links">
                 <Link to="/" className="nav-link">Home</Link>
                 <Link to="/designer" className="nav-link">Designer</Link>
+                {currentUser?.roles?.includes('ADMIN') && (
+                    <Link to="/admin/users" className="nav-link">Admin</Link>
+                )}
             </div>
 
             <div className="auth-controls">

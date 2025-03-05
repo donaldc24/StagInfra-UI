@@ -8,6 +8,7 @@ import RegistrationSuccess from './components/auth/RegistrationSuccess';
 import EmailVerification from './components/auth/EmailVerification';
 import LoginForm from './components/auth/LoginForm';
 import Navbar from './components/shared/Navbar';
+import UserVerificationDashboard from './components/admin/UserVerificationDashboard';
 import { setBackendStatus } from './store/slices/systemSlice';
 import { loadComponents } from './store/slices/componentsSlice';
 import { loadConnections } from './store/slices/connectionsSlice';
@@ -63,6 +64,12 @@ function App() {
         <Router>
             {/* Main layout with navbar for most routes */}
             <Routes>
+                <Route path="/admin/users" element={
+                    <ProtectedRoute>
+                        <Navbar />
+                        <UserVerificationDashboard />
+                    </ProtectedRoute>
+                } />
                 {/* Auth routes - no navbar for clean layout */}
                 <Route path="/register" element={<RegistrationForm />} />
                 <Route path="/login" element={<LoginForm />} />
