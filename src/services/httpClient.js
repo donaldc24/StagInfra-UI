@@ -13,12 +13,31 @@ const httpClient = axios.create({
 
 // Request interceptor for adding auth token
 httpClient.interceptors.request.use(
-    (config) => {
+    async (config) => {
         // Add authentication token if available
-        const token = authService?.getToken();
+        const token = authService.getToken();
+
         if (token) {
-            config.headers['Authorization'] = `Bearer ${token}`;
+            // Check if token is about to expire
+            if (authService.isTokenExpiring()) {
+                console.log('Token is expiring soon, attempting to refresh');
+                const refreshed = await authService.refreshToken();
+
+                if (refreshed) {
+                    // Use the new token
+                    const newToken = authService.getToken();
+                    config.headers['Authorization'] = `Bearer ${newToken}`;
+                } else {
+                    // Token refresh failed, logout the user
+                    authService.logout();
+                    window.location.href = '/login';
+                }
+            } else {
+                // Use the existing token
+                config.headers['Authorization'] = `Bearer ${token}`;
+            }
         }
+
         return config;
     },
     (error) => {

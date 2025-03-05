@@ -29,6 +29,95 @@ const handleError = (error) => {
     };
 };
 
+// Check if token is about to expire (e.g., less than 5 minutes remaining)
+const isTokenExpiring = () => {
+    const token = localStorage.getItem('auth_token');
+    if (!token) return true;
+
+    try {
+        // Decode the JWT to get expiration
+        const tokenData = JSON.parse(atob(token.split('.')[1]));
+        const expirationTime = tokenData.exp * 1000; // Convert to milliseconds
+        const currentTime = Date.now();
+
+        // Check if token will expire in the next 5 minutes
+        return expirationTime < (currentTime + 5 * 60 * 1000);
+    } catch (error) {
+        console.error('Error checking token expiration:', error);
+        return true;
+    }
+};
+
+// Refresh token functionality
+const refreshToken = async () => {
+    const refreshToken = localStorage.getItem('refresh_token');
+    if (!refreshToken) {
+        console.log('No refresh token available');
+        return false;
+    }
+
+    try {
+        const response = await httpClient.post('/auth/refresh-token', null, {
+            params: { refreshToken }
+        });
+
+        const data = response.data;
+        if (data.success && data.token) {
+            // Store the new tokens
+            localStorage.setItem('auth_token', data.token);
+            localStorage.setItem('refresh_token', refreshToken); // Keep the same refresh token
+            return true;
+        }
+
+        return false;
+    } catch (error) {
+        console.error('Error refreshing token:', error);
+        return false;
+    }
+};
+
+// Get active sessions
+const getActiveSessions = async () => {
+    try {
+        const response = await httpClient.get('/auth/active-sessions');
+        return response.data.sessions;
+    } catch (error) {
+        console.error('Error fetching active sessions:', error);
+        return [];
+    }
+};
+
+// Logout from all devices
+const logoutAllDevices = async () => {
+    try {
+        await httpClient.post('/auth/logout-all-devices');
+
+        // Clear local storage
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('refresh_token');
+        localStorage.removeItem('user');
+
+        return true;
+    } catch (error) {
+        console.error('Error logging out from all devices:', error);
+        return false;
+    }
+};
+
+// Logout from specific device
+const logoutDevice = async (sessionToken) => {
+    try {
+        await httpClient.post('/auth/logout-device', null, {
+            params: { sessionToken }
+        });
+
+        return true;
+    } catch (error) {
+        console.error('Error logging out device:', error);
+        return false;
+    }
+};
+
 // Auth service methods
 export const authService = {
     // Register a new user
@@ -127,7 +216,12 @@ export const authService = {
     // Get auth token
     getToken: () => {
         return localStorage.getItem('auth_token');
-    }
+    },
+    isTokenExpiring,
+    refreshToken,
+    getActiveSessions,
+    logoutAllDevices,
+    logoutDevice
 };
 
 // We're using httpClient with interceptors now, no need for separate interceptors here

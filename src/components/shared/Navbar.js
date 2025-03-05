@@ -27,6 +27,9 @@ const Navbar = () => {
                 {currentUser?.roles?.includes('ADMIN') && (
                     <Link to="/admin/users" className="nav-link">Admin</Link>
                 )}
+                {isAuthenticated && (
+                    <Link to="/settings/sessions" className="nav-link">Active Sessions</Link>
+                )}
             </div>
 
             <div className="auth-controls">
