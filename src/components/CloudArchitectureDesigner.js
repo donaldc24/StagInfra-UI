@@ -12,7 +12,6 @@ import Modal from './shared/Modal';
 import Notification from './shared/Notification';
 
 // Import actions
-import { setLineMode } from '../store/slices/uiStateSlice';
 import { addComponent, updateComponent, removeComponent } from '../store/slices/componentsSlice';
 import { removeComponentConnections, clearConnections } from '../store/slices/connectionsSlice';
 

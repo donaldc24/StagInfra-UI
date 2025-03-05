@@ -30,7 +30,7 @@ export const calculateCost = async (components, dispatch) => {
         };
 
         // Call the backend API
-        const response = await fetch('http://localhost:8080/api/cost', {
+        const response = await fetch('http://localhost:8081/api/cost', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -43,7 +43,7 @@ export const calculateCost = async (components, dispatch) => {
         }
 
         // Get cost calculation
-        const result = await fetch('http://localhost:8080/api/cost');
+        const result = await fetch('http://localhost:8081/api/cost');
         const costData = await result.json();
 
         // Update the cost in Redux store
