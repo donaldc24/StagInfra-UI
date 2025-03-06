@@ -1,5 +1,5 @@
 // src/components/sidebar/Sidebar.js
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { Layers, X } from 'lucide-react';
 
@@ -24,6 +24,8 @@ const Sidebar = ({
                  }) => {
     const dispatch = useDispatch();
     const [activeTab, setActiveTab] = useState('add');
+    const [sidebarWidth, setSidebarWidth] = useState(240);
+    const [isResizing, setIsResizing] = useState(false);
 
     // Redux state
     const isLineMode = useSelector(state => state.uiState.isLineMode);
@@ -33,7 +35,7 @@ const Sidebar = ({
         compute: ['ec2', 'lambda'],
         storage: ['s3', 'ebs'],
         database: ['rds', 'dynamodb'],
-        networking: ['vpc', 'subnet', 'securityGroup', 'loadBalancer']
+        networking: ['vpc', 'subnet', 'securityGroup', 'loadBalancer', 'internetGateway', 'natGateway', 'routeTable', 'networkACL']
     };
 
     // Toggle connection mode
@@ -47,6 +49,29 @@ const Sidebar = ({
             onComponentSelect(component);
         }
     };
+
+    // Start resize operation
+    const startResize = useCallback((e) => {
+        e.preventDefault();
+        setIsResizing(true);
+
+        const startX = e.clientX;
+        const startWidth = sidebarWidth;
+
+        const doDrag = (e) => {
+            const newWidth = Math.max(200, Math.min(500, startWidth + e.clientX - startX));
+            setSidebarWidth(newWidth);
+        };
+
+        const stopDrag = () => {
+            setIsResizing(false);
+            document.removeEventListener('mousemove', doDrag);
+            document.removeEventListener('mouseup', stopDrag);
+        };
+
+        document.addEventListener('mousemove', doDrag);
+        document.addEventListener('mouseup', stopDrag);
+    }, [sidebarWidth]);
 
     // Render component categories in Add tab
     const renderComponentCategories = () => {
@@ -106,8 +131,8 @@ const Sidebar = ({
                                     {item.substring(0, 2).toUpperCase()}
                                 </div>
                                 <span className="component-name">
-                  {item.toUpperCase()}
-                </span>
+                                    {item.toUpperCase()}
+                                </span>
                             </div>
                         );
                     })}
@@ -156,12 +181,12 @@ const Sidebar = ({
                                             '#6b7280'
                         }}></div>
                         <span style={{ fontWeight: 500, fontSize: '0.875rem' }}>
-              {component.name || `${component.type.toUpperCase()}-${component.id.slice(-4)}`}
-            </span>
+                            {component.name || `${component.type.toUpperCase()}-${component.id.slice(-4)}`}
+                        </span>
                     </div>
                     <span className="component-type-badge">
-            {component.type.toUpperCase()}
-          </span>
+                        {component.type.toUpperCase()}
+                    </span>
                 </div>
 
                 <div className="component-properties">
@@ -267,7 +292,10 @@ const Sidebar = ({
     };
 
     return (
-        <div className="sidebar">
+        <div className="sidebar" style={{
+            width: `${sidebarWidth}px`,
+            position: 'relative'
+        }}>
             {/* Tab navigation */}
             <div className="sidebar-tabs">
                 {['add', 'components', 'tools'].map(tab => (
@@ -287,6 +315,22 @@ const Sidebar = ({
                 {activeTab === 'components' && renderComponentList()}
                 {activeTab === 'tools' && renderToolsTab()}
             </div>
+
+            {/* Resize handle */}
+            <div
+                className="sidebar-resize-handle"
+                onMouseDown={startResize}
+                style={{
+                    position: 'absolute',
+                    right: 0,
+                    top: 0,
+                    width: '4px',
+                    height: '100%',
+                    cursor: 'ew-resize',
+                    backgroundColor: isResizing ? 'rgba(59, 130, 246, 0.5)' : 'transparent',
+                    zIndex: 10
+                }}
+            />
         </div>
     );
 };

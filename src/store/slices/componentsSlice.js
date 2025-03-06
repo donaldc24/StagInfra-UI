@@ -1,4 +1,3 @@
-// src/store/slices/componentsSlice.js
 import { createSlice } from '@reduxjs/toolkit';
 import { getComponentMetadata } from '../../services/aws';
 import { saveComponents, debouncedSaveComponents } from '../../services/utils/storageService';

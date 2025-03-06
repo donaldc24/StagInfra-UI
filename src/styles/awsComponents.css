@@ -1,0 +1,255 @@
+ /* AWS Component Style Guide */
+
+/* Component Container Styles */
+.aws-component {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    cursor: pointer;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.aws-component:hover {
+    transform: translateY(-2px);
+    z-index: 2;
+}
+
+.aws-component.selected {
+    z-index: 3;
+}
+
+/* Icon Containers */
+.aws-component-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    position: relative;
+}
+
+/* Component Type Badges */
+.aws-component-badge {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    background-color: white;
+    color: #232F3E;
+    border-radius: 10px;
+    padding: 2px 5px;
+    font-size: 8px;
+    font-weight: bold;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    z-index: 1;
+}
+
+/* Component Labels */
+.aws-component-label {
+    margin-top: 5px;
+    font-size: 12px;
+    font-weight: 500;
+    color: #333;
+    max-width: 90px;
+    text-align: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Container components (VPC, Subnet) */
+.aws-container {
+    position: relative;
+    border-radius: 8px;
+    padding: 2px;
+    background-clip: padding-box;
+}
+
+.aws-container-header {
+    position: relative;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    padding: 0 8px;
+    font-size: 12px;
+    font-weight: 500;
+    color: white;
+    border-radius: 6px 6px 0 0;
+}
+
+.aws-container-content {
+    position: relative;
+    border-radius: 0 0 6px 6px;
+    min-height: 60px;
+    padding: 10px;
+}
+
+/* AWS Service Category Colors */
+.aws-compute {
+    background-color: rgba(255, 153, 0, 0.2);
+    border: 1px solid #FF9900;
+}
+
+.aws-compute .aws-component-icon {
+    background-color: #FF9900;
+    color: white;
+}
+
+.aws-storage {
+    background-color: rgba(63, 134, 36, 0.2);
+    border: 1px solid #3F8624;
+}
+
+.aws-storage .aws-component-icon {
+    background-color: #3F8624;
+    color: white;
+}
+
+.aws-database {
+    background-color: rgba(59, 72, 204, 0.2);
+    border: 1px solid #3B48CC;
+}
+
+.aws-database .aws-component-icon {
+    background-color: #3B48CC;
+    color: white;
+}
+
+.aws-networking {
+    background-color: rgba(66, 133, 244, 0.2);
+    border: 1px solid #4285F4;
+}
+
+.aws-networking .aws-component-icon {
+    background-color: #4285F4;
+    color: white;
+}
+
+/* Specific component styling */
+.aws-vpc {
+    background-color: rgba(36, 136, 20, 0.1);
+    border: 2px solid #248814;
+}
+
+.aws-vpc-header {
+    background-color: #248814;
+}
+
+.aws-subnet {
+    background-color: rgba(52, 168, 83, 0.1);
+    border: 2px dashed #34A853;
+}
+
+.aws-subnet-header {
+    background-color: #34A853;
+}
+
+.aws-security-group {
+    background-color: rgba(66, 133, 244, 0.1);
+    border: 2px dotted #4285F4;
+    border-radius: 14px;
+}
+
+.aws-security-group-header {
+    background-color: #4285F4;
+    border-radius: 12px 12px 0 0;
+}
+
+/* Connection styles */
+.aws-connection {
+    stroke-width: 2;
+    transition: stroke-width 0.2s ease, opacity 0.2s ease;
+}
+
+.aws-connection-compute {
+    stroke: #FF9900;
+}
+
+.aws-connection-storage {
+    stroke: #3F8624;
+}
+
+.aws-connection-database {
+    stroke: #3B48CC;
+}
+
+.aws-connection-networking {
+    stroke: #4285F4;
+}
+
+.aws-connection:hover {
+    stroke-width: 3;
+}
+
+.aws-connection.selected {
+    stroke-width: 3;
+    filter: drop-shadow(0 0 2px rgba(0,0,0,0.3));
+}
+
+/* Component sizes */
+.aws-component-sm .aws-component-icon {
+    width: 36px;
+    height: 36px;
+}
+
+.aws-component-md .aws-component-icon {
+    width: 48px;
+    height: 48px;
+}
+
+.aws-component-lg .aws-component-icon {
+    width: 64px;
+    height: 64px;
+}
+
+/* Tooltip styles */
+.aws-tooltip {
+    position: absolute;
+    background-color: #232F3E;
+    color: white;
+    padding: 5px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    z-index: 1000;
+    pointer-events: none;
+    white-space: nowrap;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.aws-tooltip:after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    margin-left: -5px;
+    border-width: 5px;
+    border-style: solid;
+    border-color: #232F3E transparent transparent transparent;
+}
+
+.aws-component:hover .aws-tooltip {
+    opacity: 1;
+}
+
+/* Availability zone styling */
+.aws-az {
+    border-right: 1px dashed #ccc;
+    position: absolute;
+    top: 30px;
+    bottom: 8px;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+}
+
+.aws-az-label {
+    background-color: rgba(0,0,0,0.1);
+    padding: 2px 6px;
+    border-radius: 10px;
+    font-size: 10px;
+    transform: rotate(-90deg);
+    transform-origin: center;
+    white-space: nowrap;
+    margin-top: 40px;
+}

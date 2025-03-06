@@ -13,7 +13,8 @@ import {
     updateComponentPosition,
     selectComponents,
     removeComponent,
-    moveContainerAndContents
+    moveContainerAndContents,
+    resizeContainer
 } from '../../store/slices/componentsSlice';
 
 import {
@@ -37,6 +38,7 @@ import useCanvasControls from '../../hooks/useCanvasControls';
 
 // Import utilities
 import { getComponentMetadata } from '../../services/aws';
+import { getAwsServiceName } from '../../services/aws/awsIconLibrary';
 import { store } from '../../store';
 
 // Debug utility for tracking drag events
@@ -125,6 +127,7 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification }) => {
     const [isDragging, setIsDragging] = useState(false);
     const [draggedOverContainer, setDraggedOverContainer] = useState(null);
     const [isDebugEnabled, setIsDebugEnabled] = useState(false);
+    const [tooltip, setTooltip] = useState({ visible: false, text: '', x: 0, y: 0 });
 
     // Canvas controls (zoom, pan)
     const {
@@ -386,12 +389,57 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification }) => {
         }
     }, [isLineMode, onComponentSelect, cancelConnection]);
 
-    // Handle mouse move for drawing connections
+    // Handle mouse move for drawing connections and tooltips
     const handleMouseMove = useCallback((e) => {
+        // Handle ghost line for connections
         if (isLineMode) {
             updateGhostLine(e);
         }
-    }, [isLineMode, updateGhostLine]);
+
+        // Handle tooltips
+        const stage = e.target.getStage();
+        if (!stage) return;
+
+        const pos = stage.getPointerPosition();
+        if (!pos) return;
+
+        const shape = stage.getIntersection(pos);
+
+        if (shape && shape.getParent()) {
+            const parent = shape.getParent();
+
+            // Check if this is a component or container with componentId
+            if (parent.attrs && parent.attrs.componentId) {
+                const componentId = parent.attrs.componentId;
+                const component = canvasComponents.find(c => c.id === componentId);
+
+                if (component) {
+                    // Show tooltip with component info
+                    setTooltip({
+                        visible: true,
+                        text: getAwsServiceName(component.type),
+                        x: pos.x + 10,
+                        y: pos.y + 10
+                    });
+                    return;
+                }
+            }
+        }
+
+        // No component found, hide tooltip
+        if (tooltip.visible) {
+            setTooltip({ visible: false, text: '', x: 0, y: 0 });
+        }
+    }, [isLineMode, updateGhostLine, canvasComponents, tooltip.visible]);
+
+    // Handle container resize
+    const handleContainerResize = useCallback((containerId, width, height) => {
+        dispatch(resizeContainer({
+            id: containerId,
+            width,
+            height
+        }));
+    }, [dispatch]);
 
     // Handle drag start
     const handleDragStart = useCallback((e, componentId) => {
@@ -448,7 +496,7 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification }) => {
         }
     }, [isDragging, canvasComponents, findContainerAt, logDragEvent]);
 
-    // Handle container drag move
+// Handle container drag move
     const handleContainerDragMove = useCallback((e, containerId) => {
         if (!isDragging) return;
 
@@ -818,6 +866,7 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification }) => {
                 onDragStart={(e) => handleDragStart(e, container.id)}
                 onDragMove={(e) => handleContainerDragMove(e, container.id)}
                 onDragEnd={(e) => handleContainerDragEnd(e, container.id)}
+                onResize={handleContainerResize}
             >
                 {/* First render nested containers */}
                 {nestedContainers.map(nestedContainer => renderContainer(nestedContainer))}
@@ -841,9 +890,12 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification }) => {
                 })}
             </ContainerComponent>
         );
-    }, [selectedComponentId, draggedOverContainer, organizedComponents.containedComponents, handleComponentClick, handleDragStart, handleContainerDragMove, handleContainerDragEnd, handleDragMove, handleDragEnd, isLineMode]);
+    }, [selectedComponentId, draggedOverContainer, organizedComponents.containedComponents,
+        handleComponentClick, handleDragStart, handleContainerDragMove,
+        handleContainerDragEnd, handleDragMove, handleDragEnd, isLineMode,
+        handleContainerResize]);
 
-// Render connections between components
+    // Render connections between components
     const renderConnections = useMemo(() => {
         return connections.map(conn => {
             const source = canvasComponents.find(c => c.id === conn.from);
@@ -905,8 +957,8 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification }) => {
                 <div style={{ margin: '5px 0' }}>
                     <strong>Dragging:</strong> {isDragging ? '✓' : '✗'}
                     <span style={{ marginLeft: 10 }}>
-                        {draggedOverContainer ? `Over: ${draggedOverContainer.slice(-4)}` : ''}
-                    </span>
+                       {draggedOverContainer ? `Over: ${draggedOverContainer.slice(-4)}` : ''}
+                   </span>
                 </div>
 
                 <div style={{ margin: '5px 0' }}>
@@ -955,6 +1007,22 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification }) => {
         <div className="canvas-container relative h-full w-full">
             {/* Debug overlay when enabled */}
             {isDebugEnabled && <ContainerDebugger />}
+
+            {/* Tooltip display */}
+            {tooltip.visible && (
+                <div
+                    className="aws-tooltip"
+                    style={{
+                        position: 'absolute',
+                        left: tooltip.x,
+                        top: tooltip.y,
+                        zIndex: 1000,
+                        opacity: 1
+                    }}
+                >
+                    {tooltip.text}
+                </div>
+            )}
 
             {/* Main canvas */}
             <Stage
@@ -1026,9 +1094,9 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification }) => {
             {/* Connection mode indicator */}
             {isLineMode && (
                 <div className="connection-mode-indicator">
-                    <span className="connection-mode-indicator-icon">
-                      <Layers size={16} />
-                    </span>
+                   <span className="connection-mode-indicator-icon">
+                     <Layers size={16} />
+                   </span>
                     <span>Connection Mode Active</span>
                     <button
                         className="connection-mode-close"
@@ -1046,35 +1114,6 @@ const OptimizedCanvasContainer = ({ onComponentSelect, showNotification }) => {
             <div className="trash-area">
                 <Trash2 className="trash-icon" size={24} />
                 <span className="trash-text">Drop to Delete</span>
-            </div>
-
-            {/* Debug overlay - add ?debug to URL to show */}
-            <div
-                style={{
-                    position: 'absolute',
-                    top: 10,
-                    left: 10,
-                    background: 'rgba(0,0,0,0.7)',
-                    color: 'white',
-                    padding: 10,
-                    fontSize: 12,
-                    display: window.location.search.includes('debug') ? 'block' : 'none',
-                    zIndex: 1000
-                }}
-            >
-                <div>Components: {canvasComponents.length}</div>
-                <div>Containers: {organizedComponents.containers.length}</div>
-                <div>Standalone: {organizedComponents.standaloneComponents.length}</div>
-                <div>Scale: {scale.toFixed(2)}</div>
-                <div>Selected: {selectedComponentId || 'none'}</div>
-                <div>Position: ({position.x.toFixed(0)}, {position.y.toFixed(0)})</div>
-                {selectedComponentId && (
-                    <div>
-                        Selected Component: {
-                        canvasComponents.find(c => c.id === selectedComponentId)?.type
-                    }
-                    </div>
-                )}
             </div>
         </div>
     );
